@@ -13,18 +13,29 @@ talkgroups:
     system_owner: 1
     interface_tgid: 1
     interface_alias: "Dispatch 1"
-    prop_mode: "fdma"
-    prop_hangtime: 2000
-    prop_ckr: 0
+    prop_mode: "mixed" # Allows both FDMA and TDMA
+    prop_hangtime: 2000 # milliseconds
+    prop_ckr: 0 # Clear mode
     prop_sitewait: True
+    prop_ptt_id: False # Transmission mode
   1002:
     system_owner: 1
     interface_tgid: 2
     interface_alias: "Talkgroup 2"
-    prop_mode: "tdma"
+    prop_mode: "tdma" # TDMA only
     prop_hangtime: 3000
-    prop_ckr: 1
+    prop_ckr: 1234 # Example CKR value
     prop_sitewait: False
+    prop_ptt_id: True # PTT-ID mode
+  1003:
+    system_owner: 1
+    interface_tgid: 3
+    interface_alias: "Talkgroup 3"
+    prop_mode: "fdma" # FDMA only
+    prop_hangtime: 3000
+    prop_ckr: 5678 # Example CKR value
+    prop_sitewait: False
+    prop_ptt_id: False # Transmission mode
 
 rfss:
   1: # RFSS ID
@@ -36,38 +47,55 @@ sites:
     rfss_owner: 1
     site_id: 1
     site_alias: "Site Alpha"
+    prop_assignment_mode: "balanced" # balanced, rollover, random
     channels: # Channels specific to this site
       1: # Channel ID (local to the site)
         freq_tx: 150.000000
         freq_rx: 155.000000
         enabled: True
         fdma: True
-        tdma: False
+        tdma: True
         control: True
       2:
         freq_tx: 151.000000
         freq_rx: 156.000000
         enabled: True
         fdma: True
-        tdma: False
+        tdma: True
+        voice: True
+      3:
+        freq_tx: 151.000000
+        freq_rx: 156.000000
+        enabled: False
+        fdma: True
+        tdma: True
         voice: True
   2: # Site ID
     rfss_owner: 1
     site_id: 2
     site_alias: "Site Beta"
+    prop_assignment_mode: "rollover" # balanced, rollover, random
     channels:
       1:
         freq_tx: 152.000000
         freq_rx: 157.000000
         enabled: True
         fdma: True
-        tdma: False
+        tdma: True
         control: True
       2:
         freq_tx: 153.000000
         freq_rx: 158.000000
         enabled: True
         fdma: True
+        tdma: True
+        voice: True
+      3:
+        freq_tx: 153.000000
+        freq_rx: 158.000000
+        enabled: True
+        fdma: False
+        tdma: True
         voice: True
 
 units:
@@ -76,14 +104,14 @@ units:
     prop_type: "subscriber"
     prop_wuid: 1001
     prop_alias: "Unit A"
-    prop_phase2: False
+    prop_phase2: True  # TDMA capable
   2:
     system_id: 1
     prop_type: "subscriber"
     prop_wuid: 1002
     prop_alias: "Unit B"
-    prop_phase2: False
+    prop_phase2: False # FDMA only
 users:
-  "test":
-    password: "password"
-    token: "1" # this corresponds to the system id of 1.
+    "test":
+        password: "password"
+        token: "1" # this corresponds to the system id of 1.
