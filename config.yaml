@@ -1,1 +1,89 @@
+systems:
+  1: # System ID
+    interface_alias: "Main System"
+    wacn_owner: 1
+    interface_sysid: 123
 
+wacn:
+  1:
+    wacn: 12345
+
+talkgroups:
+  1001: # Talkgroup ID
+    system_owner: 1
+    interface_tgid: 1
+    interface_alias: "Dispatch 1"
+    prop_mode: "fdma"
+    prop_hangtime: 2000
+    prop_ckr: 0
+    prop_sitewait: True
+  1002:
+    system_owner: 1
+    interface_tgid: 2
+    interface_alias: "Talkgroup 2"
+    prop_mode: "tdma"
+    prop_hangtime: 3000
+    prop_ckr: 1
+    prop_sitewait: False
+
+rfss:
+  1: # RFSS ID
+    system_owner: 1
+    interface_alias: "RFSS A"
+
+sites:
+  1: # Site ID
+    rfss_owner: 1
+    site_id: 1
+    site_alias: "Site Alpha"
+    channels: # Channels specific to this site
+      1: # Channel ID (local to the site)
+        freq_tx: 150.000000
+        freq_rx: 155.000000
+        enabled: True
+        fdma: True
+        tdma: False
+        control: True
+      2:
+        freq_tx: 151.000000
+        freq_rx: 156.000000
+        enabled: True
+        fdma: True
+        tdma: False
+        voice: True
+  2: # Site ID
+    rfss_owner: 1
+    site_id: 2
+    site_alias: "Site Beta"
+    channels:
+      1:
+        freq_tx: 152.000000
+        freq_rx: 157.000000
+        enabled: True
+        fdma: True
+        tdma: False
+        control: True
+      2:
+        freq_tx: 153.000000
+        freq_rx: 158.000000
+        enabled: True
+        fdma: True
+        voice: True
+
+units:
+  1: # Unit ID
+    system_id: 1
+    prop_type: "subscriber"
+    prop_wuid: 1001
+    prop_alias: "Unit A"
+    prop_phase2: False
+  2:
+    system_id: 1
+    prop_type: "subscriber"
+    prop_wuid: 1002
+    prop_alias: "Unit B"
+    prop_phase2: False
+users:
+  "test":
+    password: "password"
+    token: "1" # this corresponds to the system id of 1.
