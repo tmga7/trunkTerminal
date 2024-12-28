@@ -5,22 +5,114 @@ class SiteController:
         self.site_id = site_id
         self.event_bus = event_bus
         self.site_config = site_config
-        self.channels = {int(chan_id): {"busy": False, "slotA": False, "slotB": False} for chan_id in site_config["channels"]}
+        self.channels = {int(chan_id): {"state": ChannelState.IDLE, "slotA": False, "slotB": False} for chan_id in site_config["channels"]}
+        self.site_state = SiteState.STOPPED # Initialize site state
         self.last_assigned_channel = None # For rollover
         self.channel_usage_count = {} # For balanced
+        self.site_started = False  # Add this line! Initialize to False
         for chan_id in self.site_config["channels"]:
             self.channel_usage_count[int(chan_id)] = 0
 
-        self.event_bus.subscribe("AllocateChannel", self.handle_allocate_channel)
-        self.event_bus.subscribe("CallEnded", self.handle_call_ended)
+
+
+        self.event_bus.subscribe(SiteStartRequested, self.handle_site_start_requested)
+        self.event_bus.subscribe(SiteStopRequested, self.handle_site_stop_requested)
+        self.event_bus.subscribe(SiteFailRequested, self.handle_site_fail_requested)
+        self.event_bus.subscribe(AllocateChannel, self.handle_allocate_channel)
+        self.event_bus.subscribe(CallEnded, self.handle_call_ended)
+
+        self.registered_units = set()
+        self.event_bus.subscribe(UnitRegistered, self.handle_unit_registered)
+
+    def handle_unit_registered(self, event):
+        if event.site_id != self.site_id:
+            return
+
+        if self.site_started:  # Check if the site has started
+            if self.is_talkgroup_allowed(event.tgid):
+                self.registered_units.add(event.rid)
+                self.event_bus.publish(UnitRegistrationSuccess(event.rid, self.site_id))  # Publish a success event
+                print(f"Site {self.site_id}: Unit {event.rid} Registered")
+            else:
+                self.event_bus.publish(
+                    UnitRegistrationFailed(event.rid, self.site_id, "Talkgroup is not allowed at this site"))
+                print(
+                    f"Site {self.site_id}: Unit {event.rid} Registration Failed: Talkgroup is not allowed at this site")
+        else:
+            self.event_bus.publish(UnitRegistrationFailed(event.rid, self.site_id, "Site is not active"))
+            print(f"Site {self.site_id}: Unit {event.rid} Registration Failed: Site is not active")
+
+    def is_talkgroup_allowed(self, tgid):
+        if "allowed_talkgroups" in self.site_config:
+            return tgid in self.site_config["allowed_talkgroups"]
+        return True  # Default to true if not specified
+
+    def handle_site_start_requested(self, event):
+        if event.site_id != self.site_id:
+            return  # Not for this site
+
+        self.site_state = SiteState.STARTING
+        print(f"Site {self.site_id}: Starting, State: {self.site_state}")
+
+        control_channels = []
+        voice_channels = []
+
+        for channel_id_str, channel_config in self.site_config["channels"].items():
+            if channel_config.get("enabled"):
+                channel_id = int(channel_id_str) #Convert from string to int
+                if channel_config.get("control"):
+                    control_channels.append(channel_id)
+                if channel_config.get("voice"):
+                    voice_channels.append(channel_id)
+
+        if not control_channels:
+            self.event_bus.publish(SiteStartFailed(self.site_id, "No control channels available"))
+            print(f"Site {self.site_id}: No control channels available")
+            return
+
+        if not voice_channels:
+            self.event_bus.publish(SiteStartFailed(self.site_id, "No voice channels available"))
+            print(f"Site {self.site_id}: No voice channels available")
+            return
+
+        # Assign the lowest numbered control channel
+        control_channels.sort()
+        control_channel_id = control_channels[0]
+        self.channels[control_channel_id]["control"] = True #Set the control channel
+        self.site_started = True  # Set to True when the site starts!
+        self.event_bus.publish(SiteStarted(self.site_id, control_channel_id))
+        print(f"Site {self.site_id}: Started with control channel {control_channel_id}")
+
+    def handle_site_stop_requested(self, event):
+        if event.site_id != self.site_id:
+            return
+
+        # Perform any cleanup or shutdown logic here (e.g., release channels)
+        for channel_id in self.channels:
+            self.channels[channel_id]["busy"] = False
+            self.channels[channel_id]["slotA"] = False
+            self.channels[channel_id]["slotB"] = False
+        self.site_started = False # Set to False when the site stops
+        print(f"Site {self.site_id}: Stopped")
+        self.event_bus.publish(SiteStopped(self.site_id))
+
+    def handle_site_fail_requested(self, event):
+        if event.site_id != self.site_id:
+            return
+
+        reason = event.reason
+        # Perform any failure-specific logic (e.g., set status, log error)
+        print(f"Site {self.site_id}: Failed due to {reason}")
+        self.event_bus.publish(SiteFailed(self.site_id, reason))
+
 
     def handle_allocate_channel(self, event):
         if event.site_id != self.site_id:
             return
-
         channel_id = self.find_free_channel(event.call_mode)
         if channel_id:
-            self.channels[channel_id]["busy"] = True
+            self.channels[channel_id]["state"] = ChannelState.BUSY
+            print(f"Site {self.site_id}: Channel {channel_id} is now {self.channels[channel_id]['state']}")
             self.event_bus.publish(ChannelAllocatedOnSite(self.site_id, channel_id, event.call_id, event.tgid, event.call_mode))
         else:
             self.event_bus.publish(ChannelAllocationFailedOnSite(self.site_id, event.call_id, event.tgid, "No channels available"))
@@ -76,6 +168,10 @@ class SiteController:
         return None
 
     def handle_call_ended(self, event):
+        if event.site_id == self.site_id and event.channel_id:
+            self.channels[event.channel_id]["state"] = ChannelState.IDLE
+            print(f"Site {self.site_id}: Channel {event.channel_id} is now {self.channels[event.channel_id]['state']}")
+
         if event.site_id == self.site_id:
             if event.channel_id:
                 self.channels[event.channel_id]["busy"] = False

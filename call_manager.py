@@ -2,6 +2,7 @@ from events import *
 import time
 import threading
 
+
 class CallManager:
     def __init__(self, event_bus, config, site_controllers):
         self.event_bus = event_bus
@@ -9,32 +10,42 @@ class CallManager:
         self.site_controller = site_controllers
         self.pending_allocations = {}  # Track pending allocations per call
         self.call_counter = 1
+        self.active_calls = {}  # Dictionary to store active calls
+
+    def is_call_active(self, tgid):
+        for call in self.active_calls.values():
+            if call["tgid"] == tgid:
+                return True
+        return False
+
+    def handle_console_call_start_requested(self, event):
+        if self.is_call_active(event.tgid):
+            print("Console preempted ongoing call.")
+            self.event_bus.publish(ConsoleCallPreempted(event.rid, event.tgid))
+        else:
+            self.handle_console_call_request(event)
 
     def handle_call_request(self, event):
-        call_id = self.call_counter
-        self.call_counter += 1
-        sites = self.determine_involved_sites(event.tgid)
-        call_mode = self.determine_call_mode(event.tgid, sites)
+        if self.is_call_active(event.tgid):
+            print("Subscriber preempted ongoing call.")
+            self.event_bus.publish(SubscriberCallPreempted(event.rid, event.tgid))
+        else:
+            call_id = self.generate_call_id()
+            self.pending_allocations[call_id] = {
+                "call_length": event.call_length,
+                "rid": event.rid,
+                "tgid": event.tgid,
+                "call_mode": event.ckr,
+                "allocated": {},  # Dictionary to track allocated channels per site
+                "state": CallState.REQUESTED  # Initialize the state
+            }
+            print(
+                f"Call {call_id}: Request for TGID {event.tgid} from RID {event.rid} - State: {self.pending_allocations[call_id]['state']}")
 
-        if call_mode == "FDMA":
-            if not self.check_fdma_channels_available(sites):
-                self.event_bus.publish(CallDenied(event.rid, event.tgid, "No FDMA channels available on all sites"))
-                return
+            for site_id in self.config["sites"]:
+                self.event_bus.publish(AllocateChannel(event.rid, event.tgid, site_id, call_id, event.ckr))
 
-        self.pending_allocations[call_id] = {
-            "sites": sites,
-            "allocated": {site: None for site in sites}, # Store allocated channel per site
-            "call_mode": call_mode,
-            "call_length": event.call_length,
-            "ckr": event.ckr,
-            "rid": event.rid,
-            "tgid": event.tgid
-        }
-
-        for site_id in sites:
-            self.event_bus.publish(AllocateChannel(event.rid, event.tgid, site_id, call_id, call_mode))
-
-    def handle_allocate_channel(self, event):
+    def handle_channel_allocated_on_site(self, event):
         call_id = event.call_id
         if call_id not in self.pending_allocations:
             return
@@ -43,41 +54,48 @@ class CallManager:
 
         if all(self.pending_allocations[call_id]["allocated"].values()):
             call_data = self.pending_allocations[call_id]
+            self.active_calls[call_id] = {"rid": call_data["rid"], "tgid": call_data["tgid"],
+                                          "state": CallState.ALLOCATING}  # Add to active calls WITH STATE
+            print(f"Call {call_id}: Allocated on all sites - State: {self.active_calls[call_id]['state']}")
             call_mode = call_data["call_mode"]
             ptt_id = self.get_talkgroup_ptt_id(call_data["tgid"])
             slots = None
             if call_mode == "TDMA":
                 slots = self.allocate_tdma_slots(call_data["allocated"])
                 if slots == None:
+                    self.pending_allocations[call_id]["state"] = CallState.DENIED
+                    print(
+                        f"Call {call_id}: Allocation Denied - No TDMA slots available - State: {self.pending_allocations[call_id]['state']}")
                     self.event_bus.publish(CallDenied(call_data["rid"], call_data["tgid"], "No TDMA slots available"))
                     return
 
-            self.event_bus.publish(CallAllocated(call_id, call_data["allocated"], call_data["rid"], call_data["tgid"], call_mode, ptt_id, slots))
-            self.start_call_timer(call_id, call_data["call_length"], ptt_id, call_mode, call_data["allocated"], slots, call_data["rid"], call_data["tgid"])
+            self.event_bus.publish(
+                CallAllocated(call_id, call_data["allocated"], call_data["rid"], call_data["tgid"], call_mode, ptt_id,
+                              slots))
+            self.start_call_timer(call_id, call_data["call_length"], ptt_id, call_mode, call_data["allocated"], slots,
+                                  call_data["rid"], call_data["tgid"])
             del self.pending_allocations[call_id]
         else:
-            print(f"Waiting for other sites")
-
-    def allocate_tdma_slots(self, allocated_channels):
-        slots = {}
-        for site_id, channel_id in allocated_channels.items():
-            if channel_id:
-                if self.site_controller[site_id].channels[channel_id].get("slotA") == False:
-                    self.site_controller[site_id].channels[channel_id]["slotA"] = True
-                    slots[site_id] = "A"
-                elif self.site_controller[site_id].channels[channel_id].get("slotB") == False:
-                    self.site_controller[site_id].channels[channel_id]["slotB"] = True
-                    slots[site_id] = "B"
-                else:
-                    return None
-            else:
-                return None
-        return slots
+            print(
+                f"Call {call_id}: Waiting for other sites to allocate channels - State: {CallState.ALLOCATING if call_id in self.pending_allocations else 'N/A'}")  # Added state output and conditional check
 
     def start_call_timer(self, call_id, call_length, ptt_id, call_mode, allocated_channels, slots, rid, tgid):
+        if call_id in self.active_calls:  # Check if call exists before changing state
+            self.active_calls[call_id]["state"] = CallState.ACTIVE
+            print(f"Call {call_id}: Active, State: {self.active_calls[call_id]['state']}")
+
         def end_call():
-            for site_id, channel_id in allocated_channels.items():
-                self.event_bus.publish(CallEnded(call_id, int(site_id), channel_id, call_mode, slots.get(int(site_id)) if slots else None))
+            if call_id in self.active_calls:  # Check if call exists before changing state
+                self.active_calls[call_id]["state"] = CallState.ENDING
+                print(f"Call {call_id}: Ending, State: {self.active_calls[call_id]['state']}")
+
+                for site_id, channel_id in allocated_channels.items():
+                    self.event_bus.publish(
+                        CallEnded(call_id, int(site_id), channel_id, call_mode,
+                                  slots.get(int(site_id)) if slots else None))
+
+                del self.active_calls[call_id]
+                print(f"Call {call_id}: Ended, State: {CallState.ENDED}")
 
         if ptt_id:
             # PTT-ID mode: use hang time
@@ -86,11 +104,13 @@ class CallManager:
                 if int(tg_id) == tgid:
                     hang_time = tg_config["prop_hangtime"] / 1000
                     break
+            print(f"Call {call_id}: Starting timer for {call_length + hang_time} seconds (PTT-ID mode)")
             time.sleep(call_length + hang_time)
             end_call()
 
         else:
             # Transmission mode: release immediately after call length
+            print(f"Call {call_id}: Starting timer for {call_length} seconds (Transmission mode)")
             time.sleep(call_length)
             end_call()
 
@@ -100,7 +120,7 @@ class CallManager:
         return [1, 2]
 
     def determine_call_mode(self, tgid, sites):
-        #check if the talkgroup is mixed mode
+        # check if the talkgroup is mixed mode
         tg_config = None
         for tg_id, tg in self.config.get("talkgroups", {}).items():
             if int(tg_id) == tgid:
@@ -131,11 +151,11 @@ class CallManager:
         return True  # FDMA channels available on all sites
 
     def get_talkgroup_ptt_id(self, tgid):
-      tg_config = None
-      for tg_id, tg in self.config.get("talkgroups", {}).items():
-          if int(tg_id) == tgid:
-              tg_config = tg
-              break
-      if tg_config:
-          return tg_config["prop_ptt_id"]
-      return False
+        tg_config = None
+        for tg_id, tg in self.config.get("talkgroups", {}).items():
+            if int(tg_id) == tgid:
+                tg_config = tg
+                break
+        if tg_config:
+            return tg_config["prop_ptt_id"]
+        return False
