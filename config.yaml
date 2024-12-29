@@ -1,121 +1,152 @@
-system:
-  0x00A: # System ID (Hex)
-    alias: "My P25 System"
-    wacn: 0xBEEF # WACN (Hex)
-    rfss:
-      1: # in decimal
-        site:
-          1: # siteID, in decimal
-            alias: "Main Site" #what is shown on the screen for the user
-            enabled: True #if it is enabled, we power on the site as startup, if it is off, we skip
-            mode: "balanced" # balanced, rollover, random
-            allowed_talkgroups: [ 100, 101 ] #if blank, we allow all talkgroups on this site
-            channels:
-              1:
-                enabled: True #if it is enabled, we power on startup
-                control: True
-                voice: True
-                fdma: True
-                tdma: True
-                data: True
-                freq_tx: 150.000000
-                freq_rx: 155.000000
-              2:
-                enabled: True
-                control: False
-                voice: True
-                fdma: True
-                tdma: True
-                data: True
-                freq_tx: 150.000000
-                freq_rx: 155.000000
-              3:
-                enabled: True
-                control: False
-                voice: True
-                fdma: True
-                tdma: True
-            subsites:
-              1:
-                alias: "Tower A"
-                location_x: 45.123
-                location_y: -75.456
-              2:
-                alias: "Tower B"
-                location_x: 45.124
-                location_y:
-                  -75.457
-          3: # siteID, in decimal
-            alias: "Secondary Site" #what is shown on the screen for the user
-            enabled: True #if it is enabled, we power on the site as startup, if it is off, we skip
-            mode: "balanced" # balanced, rollover, random
-            allowed_talkgroups: [ 100, 101 ] #if blank, we allow all talkgroups on this site
-            channels:
-              1:
-                enabled: True #if it is enabled, we power on startup
-                control: True
-                voice: True
-                fdma: True
-                tdma: True
-                data: True
-                freq_tx: 150.000000
-                freq_rx: 155.000000
-              2:
-                enabled: True
-                control: False
-                voice: True
-                fdma: True
-                tdma: True
-                data: True
-                freq_tx: 150.000000
-                freq_rx: 155.000000
-              3:
-                enabled: True
-                control: False
-                voice: True
-                fdma: True
-                tdma: True
-            subsites:
-              1:
-                alias: "Tower C"
-                location_x: 45.123
-                location_y: -75.456
-              2:
-                alias: "Tower D"
-                location_x: 45.124
-                location_y: -75.457
-    talkgroups:
-      1001: # Talkgroup ID (in decimal)
-        alias: "Dispatch 1"
-        mode: "mixed" # Allows both FDMA and TDMA
-        ckr: 0 # Clear mode if 0, if > 0 this is the key reference for the pseduo-encryption key
-        wait: True #determines whether we wait for all the resources to be availble accross all RFSS
-        ptt_id: False # Transmission or PTT-ID mode
-        ptt_id_hangtime: 2000 # milliseconds, only applicable for PTT-ID calls
-      1002:
-        alias: "TAC 2"
-        mode: "tdma"
-        ckr: 1
-        wait: True
-        ptt_id: True
-        ptt_id_hangtime: 2000
-      1003:
-        alias: "TAC 3"
-        mode: "fdma"
-        ckr: 1
-        wait: True
-        ptt_id: True
-        ptt_id_hangtime: 2000
-    subscribers:
-      100: # Unit ID (WUID in decimal)
-        alias: "Radio A"
-        type: "portable" #portable, mobile, console
-        phase2: True # TDMA capable
-      101:
-        alias: "Radio B"
-        type: "mobile"
-        phase2: False
-      700001:
-        alias: "Console A"
-        type: "console"
-        phase2: True
+id: 0x00A # System ID (Hex)
+alias: "My P25 System"
+wacn: 0xBEEF # WACN (Hex)
+rfss:
+  2: # in decimal
+    site:
+      6: # siteID, in decimal
+        alias: "Main Site" #what is shown on the screen for the user
+        enabled: True #if it is enabled, we power on the site as startup, if it is off, we skip
+        mode: "balanced" # balanced, rollover, random
+        allowed_talkgroups: [ 100, 101 ] #if blank, we allow all talkgroups on this site
+        channels:
+          1:
+            enabled: True #if it is enabled, we power on startup
+            control: True
+            voice: True
+            fdma: True
+            tdma: True
+            data: True
+            freq_tx: 150.000000
+            freq_rx: 155.000000
+          2:
+            enabled: True
+            control: False
+            voice: True
+            fdma: True
+            tdma: True
+            data: True
+            freq_tx: 150.000000
+            freq_rx: 155.000000
+          3:
+            enabled: True
+            control: False
+            voice: True
+            fdma: True
+            tdma: True
+        subsites:
+          1:
+            alias: "Tower A"
+            location_x: 45.123
+            location_y: -75.456
+          2:
+            alias: "Tower B"
+            location_x: 45.124
+            location_y:
+              -75.457
+      3: # siteID, in decimal
+        alias: "Secondary Site" #what is shown on the screen for the user
+        enabled: True #if it is enabled, we power on the site as startup, if it is off, we skip
+        mode: "balanced" # balanced, rollover, random
+        allowed_talkgroups: [ 100, 101 ] #if blank, we allow all talkgroups on this site
+        channels:
+          1:
+            enabled: True #if it is enabled, we power on startup
+            control: True
+            voice: True
+            fdma: True
+            tdma: True
+            data: True
+            freq_tx: 150.000000
+            freq_rx: 155.000000
+          2:
+            enabled: True
+            control: False
+            voice: True
+            fdma: True
+            tdma: True
+            data: True
+            freq_tx: 150.000000
+            freq_rx: 155.000000
+          3:
+            enabled: True
+            control: False
+            voice: True
+            fdma: True
+            tdma: True
+        subsites:
+          1:
+            alias: "Tower C"
+            location_x: 45.123
+            location_y: -75.456
+          2:
+            alias: "Tower D"
+            location_x: 45.124
+            location_y: -75.457
+  4:
+    site:
+      2:
+        alias: "Underground Site"
+        enabled: True
+        mode: "rollover"
+        allowed_talkgroups: [ ]
+        channels:
+          1:
+            enabled: True #if it is enabled, we power on startup
+            control: True
+            voice: True
+            fdma: True
+            tdma: True
+            data: True
+            freq_tx: 150.000000
+            freq_rx: 155.000000
+          2:
+            enabled: True
+            control: False
+            voice: True
+            fdma: True
+            tdma: True
+            data: True
+            freq_tx: 150.000000
+            freq_rx: 155.000000
+
+        subsites:
+          1:
+            alias: "Subway Amp"
+            location_x: 45.123
+            location_y: -75.456
+talkgroups:
+  1001: # Talkgroup ID (in decimal)
+    alias: "Dispatch 1"
+    mode: "mixed" # Allows both FDMA and TDMA
+    ckr: 0 # Clear mode if 0, if > 0 this is the key reference for the pseduo-encryption key
+    wait: True #determines whether we wait for all the resources to be availble accross all RFSS
+    ptt_id: False # Transmission or PTT-ID mode
+    ptt_id_hangtime: 2000 # milliseconds, only applicable for PTT-ID calls
+  1002:
+    alias: "TAC 2"
+    mode: "tdma"
+    ckr: 1
+    wait: True
+    ptt_id: True
+    ptt_id_hangtime: 2000
+  1003:
+    alias: "TAC 3"
+    mode: "fdma"
+    ckr: 1
+    wait: True
+    ptt_id: True
+    ptt_id_hangtime: 2000
+subscribers:
+  100: # Unit ID (WUID in decimal)
+    alias: "Radio A"
+    hardware: "portable" #portable, mobile, console
+    phase2: True # TDMA capable
+  101:
+    alias: "Radio B"
+    hardware: "mobile"
+    phase2: False
+  700001:
+    alias: "Console A"
+    hardware: "console"
+    phase2: True

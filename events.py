@@ -1,10 +1,6 @@
 import enum
 
 
-class Event:
-    pass
-
-
 class RadioState(enum.Enum):
     OFF = 0
     IDLE = 1
@@ -37,218 +33,39 @@ class SiteState(enum.Enum):
     FAILED = 4
 
 
-# Event Distribution
+# Event Classes
+class Event:
+    def __init__(self, event_type, data):
+        self.event_type = event_type
+        self.data = data
 
-class RadioSelectTalkgroup(Event):
-    def __init__(self, rid, tgid):
-        self.rid = rid
-        self.tgid = tgid
 
+class PTTPressEvent(Event):
+    def __init__(self, subscriber_unit):
+        super().__init__('PTTPress', {'subscriber_unit': subscriber_unit})
 
-class RadioDeAffiliateRequested(Event):
-    def __init__(self, rid, tgid):
-        self.rid = rid
-        self.tgid = tgid
 
+class PTTReleaseEvent(Event):
+    def __init__(self, subscriber_unit):
+        super().__init__('PTTRelease', {'subscriber_unit': subscriber_unit})
 
-class ConsoleCallStartRequested(Event):
-    def __init__(self, rid, tgid, call_length):
-        self.rid = rid
-        self.tgid = tgid
-        self.call_length = call_length
 
+class CallRequestEvent(Event):
+    def __init__(self, subscriber_unit):
+        super().__init__('CallRequest', {'subscriber_unit': subscriber_unit})
 
-class ConsoleCallPreempted(Event):
-    def __init__(self, rid, tgid):
-        self.rid = rid
-        self.tgid = tgid
 
+# Event Dispatcher
+class EventDispatcher:
+    def __init__(self):
+        self.listeners = {}
 
-class SubscriberCallPreempted(Event):
-    def __init__(self, rid, tgid):
-        self.rid = rid
-        self.tgid = tgid
+    def register_listener(self, event_type, listener):
+        if event_type not in self.listeners:
+            self.listeners[event_type] = []
+        self.listeners[event_type].append(listener)
 
-
-class UnitAffiliationSuccess(Event):
-    def __init__(self, rid, tgid):
-        self.rid = rid
-        self.tgid = tgid
-
-
-class UnitAffiliationFailed(Event):
-    def __init__(self, rid, tgid, reason):
-        self.rid = rid
-        self.tgid = tgid
-        self.reason = reason
-
-
-class UnitRegistrationSuccess(Event):
-    def __init__(self, rid, site_id):
-        self.rid = rid
-        self.site_id = site_id
-
-
-class UnitRegistrationFailed(Event):
-    def __init__(self, rid, site_id, reason):
-        self.rid = rid
-        self.site_id = site_id
-        self.reason = reason
-
-
-class RadioStatusCheck(Event):
-    def __init__(self, rid):
-        self.rid = rid
-
-
-class RadioCheckRange(Event):
-    def __init__(self, rid):
-        self.rid = rid
-
-
-class SiteStartRequested(Event):
-    def __init__(self, site_id):
-        self.site_id = site_id
-
-
-class SiteStarted(Event):
-    def __init__(self, site_id, control_channel_id):
-        self.site_id = site_id
-        self.control_channel_id = control_channel_id
-
-
-class SiteStartFailed(Event):
-    def __init__(self, site_id, reason):
-        self.site_id = site_id
-        self.reason = reason
-
-
-class SiteStopRequested(Event):
-    def __init__(self, site_id):
-        self.site_id = site_id
-
-
-class SiteStopped(Event):
-    def __init__(self, site_id):
-        self.site_id = site_id
-
-
-class SiteFailRequested(Event):
-    def __init__(self, site_id, reason):
-        self.site_id = site_id
-        self.reason = reason
-
-
-class SiteFailed(Event):
-    def __init__(self, site_id, reason):
-        self.site_id = site_id
-        self.reason = reason
-
-
-class CallStartRequested(Event):
-    def __init__(self, rid, tgid, call_length, ckr):
-        self.rid = rid
-        self.tgid = tgid
-        self.call_length = call_length
-        self.ckr = ckr
-
-
-class CallAllocated(Event):
-    def __init__(self, call_id, channel_id, rid, tgid, call_mode, ptt_id, slot=None):
-        self.call_id = call_id
-        self.channel_id = channel_id
-        self.rid = rid
-        self.tgid = tgid
-        self.call_mode = call_mode
-        self.ptt_id = ptt_id
-        self.slot = slot
-
-
-class CallDenied(Event):
-    def __init__(self, rid, tgid, reason):
-        self.rid = rid
-        self.tgid = tgid
-        self.reason = reason
-
-
-class CallEnded(Event):
-    def __init__(self, call_id, site_id, channel_id, call_mode, slot=None):
-        self.call_id = call_id
-        self.site_id = site_id
-        self.channel_id = channel_id
-        self.call_mode = call_mode
-        self.slot = slot
-
-
-class UnitRegistered(Event):
-    def __init__(self, rid, site_id):
-        self.rid = rid
-        self.site_id = site_id
-
-
-class UnitAffiliated(Event):
-    def __init__(self, rid, tgid):
-        self.rid = rid
-        self.tgid = tgid
-
-
-class RadioPowerOn(Event):
-    def __init__(self, rid):
-        self.rid = rid
-
-
-class RadioSiteListRequested(Event):
-    def __init__(self, rid):
-        self.rid = rid
-
-
-class RadioSiteListReceived(Event):
-    def __init__(self, rid, sites):  # sites is a dictionary {site_id: rssi}
-        self.rid = rid
-        self.sites = sites
-
-
-class RadioRegisterRequested(Event):
-    def __init__(self, rid, site_id):
-        self.rid = rid
-        self.site_id = site_id
-
-
-class RadioAffiliateRequested(Event):
-    def __init__(self, rid, tgid):
-        self.rid = rid
-        self.tgid = tgid
-
-
-class RadioPTT(Event):
-    def __init__(self, rid, tgid, call_length, ckr):
-        self.rid = rid
-        self.tgid = tgid
-        self.call_length = call_length
-        self.ckr = ckr
-
-
-class AllocateChannel(Event):
-    def __init__(self, rid, tgid, site_id, call_id, call_mode):
-        self.rid = rid
-        self.tgid = tgid
-        self.site_id = site_id
-        self.call_id = call_id
-        self.call_mode = call_mode
-
-
-class ChannelAllocatedOnSite(Event):
-    def __init__(self, site_id, channel_id, call_id, tgid, call_mode):
-        self.site_id = site_id
-        self.channel_id = channel_id
-        self.call_id = call_id
-        self.tgid = tgid
-        self.call_mode = call_mode
-
-
-class ChannelAllocationFailedOnSite(Event):
-    def __init__(self, site_id, call_id, tgid, reason):
-        self.site_id = site_id
-        self.call_id = call_id
-        self.tgid = tgid
-        self.reason = reason
+    def dispatch(self, event):
+        if event.event_type in self.listeners:
+            for listener in self.listeners[event.event_type]:
+                listener(event)
