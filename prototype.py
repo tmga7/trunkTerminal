@@ -90,7 +90,7 @@ async def simulate_radio_system(radio_system, command, *args):
             print("Radio System: All channels busy.")
             return "busy"  # Indicate busy
         channel = radio_system.available_channels.pop(0)
-        radio_system.in_use_channels[channel] = time.time() + 2
+        radio_system.in_use_channels[channel] = time.time() + 30
         print(f"Radio System: PTT request granted on channel {channel}.")
         return "granted"
     elif command == "OTHER_COMMAND":
