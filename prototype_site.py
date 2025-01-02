@@ -1,193 +1,162 @@
-import random
-
-# Channel Capabilities
-CHANNEL_CAP_CONTROL = 0x01  # 0000 0001 -> 1
-CHANNEL_CAP_FDMA = 0x02  # 0000 0010 -> 2
-CHANNEL_CAP_TDMA = 0x04  # 0000 0100 -> 4
-CHANNEL_CAP_BSI = 0x08  # 0000 1000 -> 8
-CHANNEL_CAP_DATA = 0x10  # 0001 0000 -> 16
-
-# Call Types
-CALL_TDMA_A = 0x20  # 0010 0000 -> 32
-CALL_TDMA_B = 0x40  # 0100 0000 -> 64
-CALL_FDMA = 0x80  # 1000 0000 -> 128
-CALL_REQUEST_GRANT = 0x120  # 0010 0000 -> 32
-CALL_REQUEST_DENY = 0x140  # 0100 0000 -> 64
-CALL_REQUEST_BUSY = 0x180  # 1000 0000 -> 128
-
-# Channel Status
-CHANNEL_ENABLED = 0x01  # 0000 0001 -> 1
-CHANNEL_ERROR = 0x02  # 0000 0010 -> 2
-CHANNEL_SERVICE_MODE = 0x04  # 0000 0100 -> 4
-CHANNEL_DISABLED = 0x08  # 0000 1000 -> 8
-
-# Site Status
-STATUS_SITE_OFFLINE = 0x10  # 0001 0000 -> 16
-STATUS_SITE_SITE_TRUNKING = 0x20  # 0010 0000 -> 32
-STATUS_SITE_FAILSOFT = 0x40  # 0100 0000 -> 64
-STATUS_SITE_IMPAIRED = 0x80  # 1000 0000 -> 128
-STATUS_SITE_WIDEAREA = 0x100  # 0001 0000 0000 -> 256
-
-# Radio Types
-RADIO_TYPE_SUBSCRIBER = 0x01  # 0000 0001 -> 1
-RADIO_TYPE_CONSOLE = 0x02  # 0000 0010 -> 2
-RADIO_TYPE_SYSTEM = 0xFFFFFF  # 0000 0100 -> 4
-
-# Call Types (extended)
-CALL_TYPE_VOICE = 0x04  # 0000 0100 -> 4
-CALL_TYPE_PATCHED = 0x08  # 0000 1000 -> 8
-CALL_TYPE_PRIVATE = 0x10  # 0001 0000 -> 16
-CALL_TYPE_MULTI_SELECT = 0x20  # 0010 0000 -> 32
-CALL_TYPE_OTAR = 0x40  # 0100 0000 -> 64
-CALL_TYPE_OTAP = 0x80  # 1000 0000 -> 128
-CALL_TYPE_DATA = 0x100  # 0001 0000 0000 -> 256
-CALL_TYPE_BSI = 0x120  # 0001 0000 0000 -> 256
-CALL_TYPE_SERVICE = 0x140
-
-# Modes
-MODE_PTT_ID = 0x01  # 0000 0001 -> 1
-MODE_TRANSMISSION = 0x02  # 0000 0010 -> 2
-
-# End Reasons
-END_REASON_NORMAL = 0x04  # 0000 0100 -> 4
-END_REASON_PREEMPTED = 0x08  # 0000 1000 -> 8
-END_REASON_EMERGENCY = 0x10  # 0001 0000 -> 16
-END_REASON_FAIL = 0x20  # 0010 0000 -> 32
-
-
-class Channel:
-    def __init__(self, number, capabilities, freq_tx, freq_rx):
-        self.number = number
-        self.capabilities = capabilities
-        self.freq_tx = freq_tx
-        self.freq_rx = freq_rx
-        self.status = CHANNEL_ENABLED
-        self.is_control_channel = False
-        self.calls = {}
-
-    def has_capability(self, capability):
-        return (self.capabilities & capability) != 0
-
-
-class Talkgroup:
-    def __init__(self, tg_id, mode, allow_fdma=True, allow_tdma=True, hang_time=2500):
-        self.id = tg_id
-        self.mode = mode
-        self.affiliated_radios = set()
-        self.allow_fdma = allow_fdma
-        self.allow_tdma = allow_tdma
-        self.hang_time = hang_time
-        self.in_emergency = False
-
-    def add_affiliated_radio(self, radio):
-        self.affiliated_radios.add(radio)
-        radio.affiliation.add(self.id)
-
-
-class Radio:
-    def __init__(self, radio_id, radio_type, is_phase2_capable=False):  # Add phase 2 capability
-        self.id = radio_id
-        self.type = radio_type
-        self.is_phase2_capable = is_phase2_capable  # add the property
-        self.in_emergency = False
-        self.affiliation = set()
-
-
-class Call:
-    def __init__(self, call_type, initiating_radio, target_talkgroups, target_radios=None, channel=None, tdma_slot=None,
-                 call_duration=None):
-        self.call_type = call_type
-        self.initiating_radio = initiating_radio
-        self.target_talkgroups = target_talkgroups  # List of talkgroups
-        self.target_radios = target_radios  # List of radios
-        self.channel = channel
-        self.tdma_slot = tdma_slot
-        self.call_duration = call_duration
-        self.call_id = random.randint(1000, 9999)
-        self.end_reason = END_REASON_NORMAL
-        self.is_in_hangtime = False
-
-    def end_call(self):
-        print("hi")
-        # we want to log call
-        # if there is a hangtime, change call status and prolong
-        # if its in hangtime, then collapse call
-        # if it preempted, state that it was - update end reason
-        # we wannt to notify site queue of the change
-
-
-class Controller:
-
-    def __init__(self, system):
-        self.talkgroups = {500: Talkgroup(500, MODE_PTT_ID, True, True, True)}
-
+from site_constants import *
+from core_radio import Radio
+from site_channel import Channel
+from core_talkgroup import Talkgroup
+from site_call import Call
+import secrets
 
 class Site:
-    def __init__(self):
+
+    def __init__(self, core):
+        self.id = None
+        self.status = STATUS_SITE_OFFLINE
+        self.core = core
         self.channels = []
-        self.talkgroups = {}
-        self.radios = {}
-        self.controller = Controller(self)
-        self.site_status = STATUS_SITE_OFFLINE
+        self.calls = [] # We keep active calls here
+        self.talkgroups = set()
+        self.radios = set()
+
 
         # Register system radio (for data calls, etc.)
-        self.register_radio(Radio(RADIO_TYPE_SYSTEM, RADIO_TYPE_SYSTEM, True))
+        # self.radios[RADIO_TYPE_SYSTEM] = Radio(self, RADIO_TYPE_SYSTEM, RADIO_TYPE_SYSTEM, True)
+
+    def add_talkgroup_id(self, talkgroup_id):
+        self.talkgroup_ids.add(talkgroup_id)
+
+    def remove_talkgroup_id(self, talkgroup_id):
+        self.talkgroup_ids.discard(talkgroup_id)
+
+    # Update an existing radio
+    def update_radio(self, radio_id, radio_type=None, is_phase2_capable=None, in_emergency=None):
+        if radio_id not in self.radios:
+            print(f"Radio {radio_id} does not exist.")
+            return
+        radio = self.radios[radio_id]
+        if radio_type is not None:
+            radio.type = radio_type
+        if is_phase2_capable is not None:
+            radio.is_phase2_capable = is_phase2_capable
+        if in_emergency is not None:
+            radio.in_emergency = in_emergency
+        print(f"Radio {radio_id} updated.")
+
+    # Delete an existing radio
+    def delete_radio(self, radio_id):
+        if radio_id not in self.radios:
+            print(f"Radio {radio_id} does not exist.")
+            return
+        del self.radios[radio_id]
+        print(f"Radio {radio_id} deleted.")
+
+    def move_to_site(self, new_site, radio_id):
+        if self.site and radio_id in self.site.radios:
+            self.site.remove_radio(radio_id)
+            self.site = new_site
+            self.site.radios[radio_id] = self
 
     def register_radio(self, radio):
+
         if radio.id not in self.radios:
             self.radios[radio.id] = radio
             return True
         else:
             return False
 
-    def deregister_radio(self, radio):
+    def unit_registration(self, radio):
+        # TODO is this radio allowed on this site?
+        self.radios.add(radio.id)
+        radio.site = self
+        print(f"{radio.id} registered successfully REG_ACCEPT")
+        return True
+
+    def unit_deregistration(self, radio):
         if radio.id in self.radios:
             del self.radios[radio.id]
-            return True
-        else:
-            return False  # Radio not found
+            radio.site = None
+            print(f"{radio.id} deregistered successfully")
 
-    def affiliate_radio(self, radio, talkgroup_ids):
+    def group_affiliation_query(self):
+        print("Group affiliation query GRP_AFF. _Q")
+
+    def deaffiliate(self, radio, talkgroup_ids):
+
+        print(f"trying to deaffliate -> {talkgroup_ids}")
+
+        for tg_id in talkgroup_ids:
+            if tg_id in self.talkgroups:
+                radio.affiliation.remove(tg_id)
+                self.talkgroups.remove(radio.id)
+                print(f"{radio.id} left {tg_id} successfully")
+
+    def group_affiliation_request(self, radio, talkgroup_ids):
 
         if radio.id not in self.radios:
             return "Radio not registered"
 
-        radio.affiliation.clear()
+        # TODO we need to our validation on whether unit can affiliate, we assume AFF_ACCEPT
+        for tg_id in talkgroup_ids:
+            if not self.core.talkgroups[tg_id].allow_fdma and not radio.phase_2_capable:
+                return "Radio cannot affiliate to this talkgroup (TDMA only) AFF_DENY"
+
+        # We remove our radio from master talkgroup list, and radio's affiliation
+        print(f"Pre-ttalkgroup status: {list(self.core.talkgroups[tg_id].affiliations)}")
 
         for tg_id in talkgroup_ids:
-            if not self.talkgroups[tg_id].allow_fdma and not radio.phase_2_capable:
-                return "Radio cannot affiliate to this talkgroup (TDMA only)"
+            self.core.talkgroups[tg_id].affiliations.pop(radio.id, None)
+            radio.affiliation.discard(tg_id)
+
+        # Now we add our talkgroups
+        for tg_id in talkgroup_ids:
+            self.core.talkgroups[tg_id].affiliations[radio.id] = self.id
             radio.affiliation.add(tg_id)
-            self.talkgroups[tg_id].affiliated_radios.add(radio.id)
-            if radio.type == RADIO_TYPE_SUBSCRIBER:
-                break
 
-        return "Radio affiliated successfully"
+        print(f"AFF_ACCEPT on {tg_id} for {radio.id}")
 
-    def deaffiliate_radio(self, radio, talkgroup_ids):
+        return True
 
-        for tg_id in talkgroup_ids:
-            if tg_id in radio.affiliated_talkgroups: radio.affiliation.remove(tg_id)
-            self.talkgroups[tg_id].affiliated_radios.remove(radio.id)
+    # Create a new channel
+    def create_channel(self, channel_number, capabilities, freq_tx=000.00000, freq_rx=000.00000):
+        if any(ch.number == channel_number for ch in self.channels):
+            print(f"Channel {channel_number} already exists.")
+            return
+        new_channel = Channel(channel_number, capabilities, freq_tx, freq_rx)
+        self.channels.append(new_channel)
+        print(f"Channel {channel_number} created.")
 
-        return "Radio left the talkgroup"
+    # Update an existing channel
+    def update_channel(self, channel_number, capabilities=None, freq_tx=None, freq_rx=None, status=None):
+        channel = next((ch for ch in self.channels if ch.number == channel_number), None)
+        if capabilities is not None:
+            channel.capabilities = capabilities
+        if freq_tx is not None:
+            channel.freq_tx = freq_tx
+        if freq_rx is not None:
+            channel.freq_rx = freq_rx
+        if status is not None:
+            channel.status = status
+        print(f"Channel {channel_number} updated.")
 
     def initialize_system(self):
-        if self.control_channel_manager.initialize():
-            self.site_status = STATUS_SITE_WIDEAREA
+        control_channels = [ch for ch in self.channels if ch.has_capability(CHANNEL_CAP_CONTROL)]
+        print(f"Control channels that we can use: {control_channels}")
+
+        # Ensure there are control channels before proceeding
+        if control_channels:
+            # Set the control channel to the one with the smallest number
+            min(control_channels, key=lambda ch: ch.number).is_control_channel = True
+            self.status = STATUS_SITE_WIDEAREA
             print("System initialized. System status: WIDEAREA.")
+        else:
+            print("No control channels found.")
+
+        # Debug: Print control channel numbers
+        print("Control channel numbers:")
+        for ch in self.channels:
+            print(f"{ch.is_control_channel} = {ch.number})")
 
     def add_channel(self, channel):
         self.channels.append(channel)
         return "Channel added successfully"
-
-    def create_talkgroup(self, tg_id, mode, allow_fdma=True, allow_tdma=True, hang_time=2500):
-        if tg_id not in self.talkgroups:
-            self.talkgroups[tg_id] = Talkgroup(tg_id, mode, allow_fdma, allow_tdma, hang_time)
-            print(
-                f"Talkgroup {tg_id} created with mode {mode} and allow fdma {allow_fdma} and tdma {allow_tdma} and hang time {hang_time}")
-        else:
-            print("Talkgroup already exists.")
 
     def is_tdma(self, call_type, initiating_radio, talkgroup_ids=None, target_radio=None):
 
@@ -226,7 +195,7 @@ class Site:
                     (ch.capabilities & required_capabilities) and not ch.is_control_channel]
 
         for ch in self.channels:
-            print(f"Channels found: {ch.is_control_channel}")
+            print(f"Channels found: {ch.number}")
 
         # Identify middle channels for preferred listing
         total_channels = len(channels)
@@ -349,52 +318,50 @@ class Site:
         else:
             return CALL_REQUEST_BUSY
 
+    def create_call(self, call_type=None, initiating_radio=None, talkgroup_id=None):
 
-site = Site()
+        call_sequence = secrets.token_hex(8)
 
-# Create Talkgroups
-site.create_talkgroup(101, MODE_PTT_ID)
-site.create_talkgroup(102, MODE_TRANSMISSION, True, False)
-site.create_talkgroup(103, MODE_TRANSMISSION)
-site.create_talkgroup(104, MODE_TRANSMISSION)
-site.create_talkgroup(105, MODE_TRANSMISSION)
+        print(call_sequence)
 
-# Create Radios
-radio1 = Radio(1, RADIO_TYPE_SUBSCRIBER, True)
-radio2 = Radio(2, RADIO_TYPE_SUBSCRIBER, True)
-radio3 = Radio(3, RADIO_TYPE_SUBSCRIBER, True)
-radio4 = Radio(4, RADIO_TYPE_SUBSCRIBER, True)
-radio5 = Radio(5, RADIO_TYPE_CONSOLE, False)
+        self.calls.append(Call(call_sequence))
 
-site.add_channel(Channel(1, CHANNEL_CAP_FDMA | CHANNEL_CAP_CONTROL, 867.5625, 822.5625))
-site.add_channel(
-    Channel(2, CHANNEL_CAP_CONTROL | CHANNEL_CAP_TDMA | CHANNEL_CAP_DATA | CHANNEL_CAP_FDMA, 867.5625, 822.5625))
+        print(f"Call {call_sequence} created on {self.id}.")
 
-print(site.register_radio(radio1))
-print(site.register_radio(radio2))
-print(site.register_radio(radio3))
-print(site.register_radio(radio5))
-print(site.affiliate_radio(radio1, [101]))
-print(site.affiliate_radio(radio2, [102]))
-print(site.affiliate_radio(radio3, [103]))
-print(site.affiliate_radio(radio5, [101, 102, 105]))
 
-# print(site.determine_fdma_tdma(CALL_TYPE_PRIVATE, radio1, None, radio2))
-# print(site.is_tdma(CALL_TYPE_OTAP, radio1))
+    def isp_group_voice_service_request(self, initiating_radio, talkgroup_ids=None):
 
-site.process_call(CALL_TYPE_VOICE, radio1)
-site.process_call(CALL_TYPE_VOICE, radio2)
-site.process_call(CALL_TYPE_VOICE, radio5)
-site.process_call(CALL_TYPE_VOICE, radio3)
+        # Confirm talkgroup
+        # A console by default, will transmit on all talkgroups if not specified
+        if not talkgroup_ids:
+            if initiating_radio.type == RADIO_TYPE_SUBSCRIBER:
+                talkgroup_ids = [next(iter(initiating_radio.affiliation))]
+            elif initiating_radio.type == RADIO_TYPE_CONSOLE and not talkgroup_ids:
+                talkgroup_ids = initiating_radio.affiliation
 
-# system.add_channel(Channel(3, CHANNEL_CAP_CONTROL | CHANNEL_CAP_TDMA | CHANNEL_CAP_DATA | CHANNEL_CAP_FDMA, 867.5625, 822.5625))
-# system.add_channel(Channel(4, CHANNEL_CAP_DATA | CHANNEL_CAP_DATA | CHANNEL_CAP_FDMA, 867.5625, 822.5625))
-# system.add_channel(Channel(5, CHANNEL_CAP_DATA | CHANNEL_CAP_BSI | CHANNEL_CAP_DATA | CHANNEL_CAP_FDMA, 867.5625, 822.5625))
+        # Check capability
+        #modulation = self.is_tdma(call_type, initiating_radio, talkgroup_ids, target_radio)
 
-# site.initialize_system()
 
-# system.control_channel_manager.process_call_request(CALL_TYPE_OTAP, radio2, None, None, 15000)
-# system.control_channel_manager.process_call_request(CALL_TYPE_VOICE, radio1, [101], None, 15000)
-# system.control_channel_manager.process_call_request(CALL_TYPE_VOICE, radio3, [102], None, 15000)
-# system.control_channel_manager.process_call_request(CALL_TYPE_VOICE, radio4, [103], None, 15000)
-# system.control_channel_manager.process_call_request(CALL_TYPE_PATCHED, radioConsole, [101, 102, 103, 104], None, 15000)
+        print("GRP V REQ")
+
+    def isp_unit_to_unit_voice_service_request(self, emergency, initiating_radio, talkgroup_ids=None, target_radio=None):
+        print("UU_V_REQ)")
+
+    def isp_unit_to_unit_voice_answer_response(self, emergency, initiating_radio, talkgroup_ids=None, target_radio=None):
+        print("UU ANS RSP)")
+
+    def osp_group_voice_channel_grant(self):
+        print("GRP V CH GRANT")
+
+    def osp_group_voice_channel_grant_update(self):
+        # late entry, updates only, visual interface
+        print("G R P V C H GRANT UPDT")
+
+    def osp_unit_to_unit_voice_channel_grant(self):
+        print("U U V C H GRANT )")
+
+    def isp_unit_to_unit_voice_answer_request(self):
+        #This is the packet to indicate to the target unit that a unit to unit call has been requested involving this target unit.
+        print("UU ANS_REQ")
+
