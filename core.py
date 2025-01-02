@@ -18,6 +18,7 @@ class Core:
         self.sites = {}
         self.talkgroups = {}
         self.radios = {}
+        self.radio_to_site = {}
 
     def create_radio(self, radio_id, radio_type, is_phase2_capable):
         if radio_id in self.radios:
@@ -56,7 +57,7 @@ class Core:
         # Unit Registration Response (U_REG_RSP)
 
         # Check if the radio is registered on any other site
-        existing_site = self.find_radio_in_sites(radio.id)
+        existing_site = self.radio_to_site.get(radio.id)
         if existing_site:
             # 1 Attempt deaffiliation
             self.sites[existing_site].deaffiliate(radio, radio.affiliation)
@@ -68,6 +69,7 @@ class Core:
         if not existing_site:
             # Let's register
             if self.sites[site_id].unit_registration(radio):
+                self.radio_to_site[radio.id] = site_id
                 return True
             else:
                 return False
