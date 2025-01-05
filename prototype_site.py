@@ -3,7 +3,7 @@ from core_radio import Radio
 from site_channel import Channel
 from core_talkgroup import Talkgroup
 from site_call import Call
-import secrets
+
 
 class Site:
 
@@ -12,10 +12,9 @@ class Site:
         self.status = STATUS_SITE_OFFLINE
         self.core = core
         self.channels = []
-        self.calls = [] # We keep active calls here
-        self.talkgroups = set()
+        self.calls = []  # We keep active calls here
+        self.talkgroups = {}
         self.radios = set()
-
 
         # Register system radio (for data calls, etc.)
         # self.radios[RADIO_TYPE_SYSTEM] = Radio(self, RADIO_TYPE_SYSTEM, RADIO_TYPE_SYSTEM, True)
@@ -48,6 +47,24 @@ class Site:
         del self.radios[radio_id]
         print(f"Radio {radio_id} deleted.")
 
+    def sys_request_call_resources(self, pending_call, talkgroup_id):
+
+        modulation = self.is_tdma(pending_call["call_type"], pending_call["initiating_radio"],
+                                  pending_call["talkgroup_ids"])
+        try:
+            channel, slot, preempt_calls = self.search_talkpath(modulation, pending_call["talkgroup_ids"])
+            # If we reach here, we have successfully allocated the resources
+            pending_call["site_requests"][self.id]["status"] = "granted"
+            pending_call["site_requests"][self.id]["channel"] = channel
+            pending_call["site_requests"][self.id]["slot"] = slot
+            # Notify core
+            print("we notifed the core")
+            self.core.handle_site_resource_response(pending_call["id"], self.id, "granted", channel, slot)
+        except Exception as e:  # No suitable channel found
+            pending_call["site_requests"][self.id]["status"] = "denied"
+            self.core.handle_site_resource_response(pending_call["id"], self.id, "denied", None, None)
+            print(f"Site {self.id} could not allocate resources: {e}")
+
     def move_to_site(self, new_site, radio_id):
         if self.site and radio_id in self.site.radios:
             self.site.remove_radio(radio_id)
@@ -72,6 +89,7 @@ class Site:
     def unit_deregistration(self, radio):
         if radio.id in self.radios:
             del self.radios[radio.id]
+            del self.core.radio_to_site[radio.id]
             radio.site = None
             print(f"{radio.id} deregistered successfully")
 
@@ -169,9 +187,10 @@ class Site:
         elif call_type in [CALL_TYPE_VOICE, CALL_TYPE_PATCHED, CALL_TYPE_MULTI_SELECT]:
             _is_tdma = True
             for tg_id in talkgroup_ids:
-                tg = self.talkgroups[tg_id]
-                if any(not self.radios[r].is_phase2_capable for r in tg.affiliated_radios):
-                    _is_tdma = False
+                if tg_id in self.talkgroups:
+                    tg = self.talkgroups[tg_id]
+                    if any(not self.radios[r].is_phase2_capable for r in tg.affiliated_radios):
+                        _is_tdma = False
                     break
 
         return _is_tdma
@@ -328,7 +347,6 @@ class Site:
 
         print(f"Call {call_sequence} created on {self.id}.")
 
-
     def isp_group_voice_service_request(self, initiating_radio, talkgroup_ids=None):
 
         # Confirm talkgroup
@@ -340,15 +358,16 @@ class Site:
                 talkgroup_ids = initiating_radio.affiliation
 
         # Check capability
-        #modulation = self.is_tdma(call_type, initiating_radio, talkgroup_ids, target_radio)
-
+        # modulation = self.is_tdma(call_type, initiating_radio, talkgroup_ids, target_radio)
 
         print("GRP V REQ")
 
-    def isp_unit_to_unit_voice_service_request(self, emergency, initiating_radio, talkgroup_ids=None, target_radio=None):
+    def isp_unit_to_unit_voice_service_request(self, emergency, initiating_radio, talkgroup_ids=None,
+                                               target_radio=None):
         print("UU_V_REQ)")
 
-    def isp_unit_to_unit_voice_answer_response(self, emergency, initiating_radio, talkgroup_ids=None, target_radio=None):
+    def isp_unit_to_unit_voice_answer_response(self, emergency, initiating_radio, talkgroup_ids=None,
+                                               target_radio=None):
         print("UU ANS RSP)")
 
     def osp_group_voice_channel_grant(self):
@@ -362,6 +381,5 @@ class Site:
         print("U U V C H GRANT )")
 
     def isp_unit_to_unit_voice_answer_request(self):
-        #This is the packet to indicate to the target unit that a unit to unit call has been requested involving this target unit.
+        # This is the packet to indicate to the target unit that a unit to unit call has been requested involving this target unit.
         print("UU ANS_REQ")
-

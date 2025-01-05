@@ -31,7 +31,7 @@ zc.radios[700001].turn_on([101, 103, 104])
 
 zc.radios[1004].subscriber_group_ptt()
 
-print(f"HI = ", zc.dump_talkgroup_radio_ids([101, 103, 101]))
+print(f"HI = ", zc.get_talkgroup_radio_ids([101, 103, 101]))
 
 print(f"Site1 radios: {list(zc.sites[1].radios)}")
 print(f"Site2 radios: {list(zc.sites[2].radios)}")

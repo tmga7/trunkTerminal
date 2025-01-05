@@ -73,6 +73,5 @@ class Radio:
         #
         print("ptt starts")
         self.core.global_isp_group_voice_service_request(self)
-        #self.site.isp_group_voice_service_request(self)
-        print("ptt starts")
+        print("ptt --> finish")
 

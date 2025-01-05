@@ -3,9 +3,9 @@ from site_constants import *
 import secrets
 
 class Call:
-
-    def __init__(self, sequence, call_type=None, initiating_radio=None, target_talkgroup=None, target_radio=None, channel=None, tdma_slot=None,
-                 call_duration=None):
+    def __init__(self, pending_call_id, call_type=None, initiating_radio=None, target_talkgroup=None,
+                 target_radio=None, channel=None, tdma_slot=None, call_duration=None):
+        self.pending_call_id = pending_call_id  # Reference to the parent call
         self.id = sequence
         self.call_type = call_type
         self.initiating_radio = initiating_radio
@@ -20,6 +20,13 @@ class Call:
 
         print("we made a call")
 
+    def create_site_call(self, pending_call_id, initiating_radio, target_talkgroup, channel, tdma_slot):
+        new_call = Call(pending_call_id, initiating_radio=initiating_radio, target_talkgroup=target_talkgroup,
+                        channel=channel, tdma_slot=tdma_slot)
+        channel.calls[new_call.call_id] = new_call  # Add to channel's calls
+        self.calls.append(new_call)  # Add to the site's calls list
+        print(f"Call {new_call.call_id} created on site {self.id} (Parent: {pending_call_id})")
+        return new_call
     def end_call(self):
         print("hi")
         # we want to log call
