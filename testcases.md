@@ -49,3 +49,45 @@ The events should be processed in the order they were scheduled:
 Priority 5, time 1.0 (ptt 1)
 Priority 5, time 1.0 (announce "Same Time 1")
 Priority 5, time 1.0 (ptt 2)
+
+
+Main Program
+  ├── SystemInstance (UUID: UUID1)
+  │     ├── Event Queue (Prioritized)
+  │     ├── Busy Queue (Prioritized)
+  │     └── Queue Monitor Thread
+  ├── SystemInstance (UUID: UUID2)
+  │     ├── Event Queue (Prioritized)
+  │     ├── Busy Queue (Prioritized)
+  │     └── Queue Monitor Thread
+  ├── SystemInstance (UUID: UUID3)
+        ├── Event Queue (Prioritized)
+        ├── Busy Queue (Prioritized)
+        └── Queue Monitor Thread
+
+
+def some_function(rfss, site_id, channel_id, data):
+    site = rfss.sites.get(site_id)
+    if site:
+        channel = site.channels.get(channel_id)
+        if channel:
+            with site._lock: # Acquire the site lock first
+                with channel._lock: # Then acquire the channel lock
+                    # Now you can safely access and modify both site and channel data
+                    channel._state['some_data'] = data
+                    site._state['last_updated_channel'] = channel_id
+
+class RFSS:
+    # ... (other RFSS code)
+
+    def process_talkgroups(self, talkgroup_ids):
+        with self._lock:  # Lock the RFSS to protect access to the talkgroups *dictionary*
+            for talkgroup_id in talkgroup_ids:
+                talkgroup = self.talkgroups.get(talkgroup_id)
+                if talkgroup:
+                    with talkgroup._lock:  # Lock the *individual talkgroup*
+                        # Now you can safely access and modify the talkgroup's state
+                        print(f"Processing talkgroup {talkgroup_id}")
+                        talkgroup._state['some_property'] = "new value"
+                else:
+                    print(f"Talkgroup with ID {talkgroup_id} not found.")

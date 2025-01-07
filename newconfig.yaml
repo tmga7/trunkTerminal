@@ -1,0 +1,76 @@
+{
+  "wacn": {
+    "id": 48800,
+    "consoles": [
+      { "id": 101, "location": "Dispatch Center" }
+    ],
+    "groups": [
+      { "id": 1, "name": "Police", "priority": 3, "subscribers": [1, 2], "talkgroups": [101] },
+      { "id": 2, "name": "Fire", "priority": 4, "talkgroups": [201] },
+      { "id": 3, "name": "Transit", "priority": 10, "talkgroups": [501] }
+    ],
+    "subscribers": [
+      { "id": 1, "name": "Subscriber 1", "is_phase2": true },
+      { "id": 2, "name": "Subscriber 2", "is_phase2": false },
+      { "id": 3, "name": "Subscriber 3" }
+    ],
+    "talkgroups": [
+      { "id": 101, "priority": 1, "name": "Police Dispatch" },
+      { "id": 201, "priority": 1, "name": "Fire Dispatch" },
+      { "id": 501, "priority": 1, "name": "Transit Dispatch" }
+    ]
+  },
+  "rfsss": [
+    {
+      "id": 1,
+      "name": "RFSS One",
+      "sites": [
+        {
+          "id": 1001,
+          "location": "Site A",
+          "channels": [{ "id": 1, "frequency": 800 }],
+          "subsites": [
+            {
+              "id": 1,
+              "name": "Cheese Factory Road",
+              "latitude": 43.336329,
+              "longitude": -80.287796,
+              "operating_radius": 25.6
+            },
+            {
+              "id": 2,
+              "name": "Baden Tower",
+              "latitude": 43.404802,
+              "longitude": -80.634774,
+              "operating_radius": 45
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "name": "RFSS Two",
+      "sites": [
+        {
+          "id": 1002,
+          "location": "Site B",
+          "channels": [{ "id": 2, "frequency": 900 }],
+          "subsites": [
+            {
+              "id": 1,
+              "name": "Cheese Factory Road",
+              "latitude": 43.442585,
+              "longitude": -80.584538,
+              "operating_radius": 28.6
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "operating_area": {
+    "top_left": { "latitude": 43.704554, "longitude": -80.971953 },
+    "bottom_right": { "latitude": 43.271144, "longitude": -80.064208 }
+  }
+}
