@@ -1,152 +1,104 @@
-id: 0x00A # System ID (Hex)
-alias: "My P25 System"
-wacn: 0xBEEF # WACN (Hex)
-rfss:
-  2: # in decimal
-    site:
-      6: # siteID, in decimal
-        alias: "Main Site" #what is shown on the screen for the user
-        enabled: True #if it is enabled, we power on the site as startup, if it is off, we skip
-        mode: "balanced" # balanced, rollover, random
-        allowed_talkgroups: [ 100, 101 ] #if blank, we allow all talkgroups on this site
-        channels:
-          1:
-            enabled: True #if it is enabled, we power on startup
-            control: True
-            voice: True
-            fdma: True
-            tdma: True
-            data: True
-            freq_tx: 150.000000
-            freq_rx: 155.000000
-          2:
-            enabled: True
-            control: False
-            voice: True
-            fdma: True
-            tdma: True
-            data: True
-            freq_tx: 150.000000
-            freq_rx: 155.000000
-          3:
-            enabled: True
-            control: False
-            voice: True
-            fdma: True
-            tdma: True
-        subsites:
-          1:
-            alias: "Tower A"
-            location_x: 45.123
-            location_y: -75.456
-          2:
-            alias: "Tower B"
-            location_x: 45.124
-            location_y:
-              -75.457
-      3: # siteID, in decimal
-        alias: "Secondary Site" #what is shown on the screen for the user
-        enabled: True #if it is enabled, we power on the site as startup, if it is off, we skip
-        mode: "balanced" # balanced, rollover, random
-        allowed_talkgroups: [ 100, 101 ] #if blank, we allow all talkgroups on this site
-        channels:
-          1:
-            enabled: True #if it is enabled, we power on startup
-            control: True
-            voice: True
-            fdma: True
-            tdma: True
-            data: True
-            freq_tx: 150.000000
-            freq_rx: 155.000000
-          2:
-            enabled: True
-            control: False
-            voice: True
-            fdma: True
-            tdma: True
-            data: True
-            freq_tx: 150.000000
-            freq_rx: 155.000000
-          3:
-            enabled: True
-            control: False
-            voice: True
-            fdma: True
-            tdma: True
-        subsites:
-          1:
-            alias: "Tower C"
-            location_x: 45.123
-            location_y: -75.456
-          2:
-            alias: "Tower D"
-            location_x: 45.124
-            location_y: -75.457
-  4:
-    site:
-      2:
-        alias: "Underground Site"
-        enabled: True
-        mode: "rollover"
-        allowed_talkgroups: [ ]
-        channels:
-          1:
-            enabled: True #if it is enabled, we power on startup
-            control: True
-            voice: True
-            fdma: True
-            tdma: True
-            data: True
-            freq_tx: 150.000000
-            freq_rx: 155.000000
-          2:
-            enabled: True
-            control: False
-            voice: True
-            fdma: True
-            tdma: True
-            data: True
-            freq_tx: 150.000000
-            freq_rx: 155.000000
+# config.yaml (Revised for Hierarchy)
 
-        subsites:
-          1:
-            alias: "Subway Amp"
-            location_x: 45.123
-            location_y: -75.456
-talkgroups:
-  1001: # Talkgroup ID (in decimal)
-    alias: "Dispatch 1"
-    mode: "mixed" # Allows both FDMA and TDMA
-    ckr: 0 # Clear mode if 0, if > 0 this is the key reference for the pseduo-encryption key
-    wait: True #determines whether we wait for all the resources to be availble accross all RFSS
-    ptt_id: False # Transmission or PTT-ID mode
-    ptt_id_hangtime: 2000 # milliseconds, only applicable for PTT-ID calls
-  1002:
-    alias: "TAC 2"
-    mode: "tdma"
-    ckr: 1
-    wait: True
-    ptt_id: True
-    ptt_id_hangtime: 2000
-  1003:
-    alias: "TAC 3"
-    mode: "fdma"
-    ckr: 1
-    wait: True
-    ptt_id: True
-    ptt_id_hangtime: 2000
-subscribers:
-  100: # Unit ID (WUID in decimal)
-    alias: "Radio A"
-    hardware: "portable" #portable, mobile, console
-    phase2: True # TDMA capable
-  101:
-    alias: "Radio B"
-    hardware: "mobile"
-    phase2: False
-  700001:
-    alias: "Console A"
-    hardware: "console"
-    phase2: True
+# --- Top Level WACN Definition ---
+wacn:
+  id: 90210 # The Wide Area Communications Network ID
+
+  # --- Zones (RFSS) are defined under the WACN ---
+  zones:
+    101: # Zone/RFSS ID (This is also the System ID)
+      alias: "Metropolis Public Safety"
+      area:
+        top_left:
+          latitude: 45.5
+          longitude: -76.0
+        bottom_right:
+          latitude: 45.0
+          longitude: -75.0
+
+      # --- Sites are defined within a Zone ---
+      sites:
+        1:
+          alias: "Downtown Core"
+          assignment_mode: "balanced"
+          subsites:
+            - id: 1001
+              alias: "Tower A"
+              location:
+                latitude: 45.42
+                longitude: -75.69
+          channels:
+            1: { freq_tx: 150.0, freq_rx: 155.0, enabled: true, fdma: true, tdma: true, control: true }
+            2: { freq_tx: 151.0, freq_rx: 156.0, enabled: true, fdma: true, tdma: true, voice: true }
+        2:
+          alias: "East Suburbs"
+          assignment_mode: "rollover"
+          subsites:
+            - id: 2001
+              alias: "Tower B"
+              location:
+                latitude: 45.40
+                longitude: -75.50
+          channels:
+            1: { freq_tx: 152.0, freq_rx: 157.0, enabled: true, fdma: true, tdma: true, control: true }
+
+      # --- Resources like TGs and Units belong to the Zone ---
+      talkgroups:
+        1001: { alias: "Dispatch 1", mode: "mixed", hangtime: 2000, ptt_id: false }
+        1002: { alias: "Tac 1", mode: "tdma", hangtime: 3000, ptt_id: true }
+
+      consoles:
+        2001: # Console ID
+          alias: "Dispatch Console 1"
+          # A list of talkgroup IDs this console can monitor and use.
+          # For now, it can access all talkgroups in this zone.
+          affiliated_talkgroup_ids: [1001, 1002]
+
+      units:
+        1: { alias: "Unit A", tdma_capable: true }
+        2: { alias: "Unit B", tdma_capable: false }
+
+    501: # Zone/RFSS ID (This is also the System ID)
+      alias: "Undergroup System"
+      area:
+        top_left:
+          latitude: 45.5
+          longitude: -76.0
+        bottom_right:
+          latitude: 45.0
+          longitude: -75.0
+
+      # --- Sites are defined within a Zone ---
+      sites:
+        1:
+          alias: "Downtown Core"
+          assignment_mode: "balanced"
+          subsites:
+            - id: 1001
+              alias: "Tower A"
+              location:
+                latitude: 45.42
+                longitude: -75.69
+          channels:
+            1: { freq_tx: 150.0, freq_rx: 155.0, enabled: true, fdma: true, tdma: true, control: true }
+            2: { freq_tx: 151.0, freq_rx: 156.0, enabled: true, fdma: true, tdma: true, voice: true }
+        2:
+          alias: "East Suburbs"
+          assignment_mode: "rollover"
+          subsites:
+            - id: 2001
+              alias: "Tower B"
+              location:
+                latitude: 45.40
+                longitude: -75.50
+          channels:
+            1: { freq_tx: 152.0, freq_rx: 157.0, enabled: true, fdma: true, tdma: true, control: true }
+
+      # --- Resources like TGs and Units belong to the Zone ---
+      talkgroups:
+        1001: { alias: "Dispatch 1", mode: "mixed", hangtime: 2000, ptt_id: false }
+        1002: { alias: "Tac 1", mode: "tdma", hangtime: 3000, ptt_id: true }
+
+      units:
+        1: { alias: "Unit A", tdma_capable: true }
+        2: { alias: "Unit B", tdma_capable: false }
