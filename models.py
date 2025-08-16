@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import Dict, List, Union, Optional
+from typing import Dict, List, Union, Optional, Tuple
 from enum import Enum
 
 # --- Import EventPriority from our p25 packets ---
@@ -163,20 +163,19 @@ class Unit:
     alias: str
     tdma_capable: bool
     state: UnitState = UnitState.POWERED_OFF
+    location: Optional[Coordinates] = None #
     current_site: Optional[Site] = None
+    visible_sites: List[Tuple[Site, int]] = field(default_factory=list)
     selected_talkgroup: Optional[Talkgroup] = None
     affiliated_talkgroup: Optional[Talkgroup] = None
-    # Use forward reference 'Group' to avoid NameError
     groups: List['Group'] = field(default_factory=list)
 
-    def power_on(self) -> Optional[UnitRegistrationRequest]:
+    def power_on(self) -> None:
+        """Sets the unit's state to begin the site searching process."""
         if self.state == UnitState.POWERED_OFF:
             self.state = UnitState.SEARCHING_FOR_SITE
             print(f"  -> Unit {self.id} ({self.alias}): Powered ON. State: {self.state.value}.")
-            self.state = UnitState.REGISTERING
-            print(f"  -> Unit {self.id} ({self.alias}): Found site (simulated). State: {self.state.value}. Sending U_REG_REQ.")
-            return UnitRegistrationRequest(unit_id=self.id)
-        return None
+
 
     def handle_registration_response(self, response: UnitRegistrationResponse) -> Optional[GroupAffiliationRequest]:
         if response.status == RegistrationStatus.GRANTED:

@@ -18,6 +18,22 @@ class Event:
 # within the simulation to begin a process. They are not P25 packets themselves.
 
 @dataclass
+class UnitUpdateLocationCommand(Event):
+    """High-level command to change a unit's physical location."""
+    unit_id: int
+    new_location: 'Coordinates' # Use forward reference for Coordinates
+    priority: EventPriority = EventPriority.NORMAL
+
+@dataclass
+class UnitScanForSitesCommand(Event):
+    """
+    High-level command to instruct a Unit to scan for the best available site
+    based on its current location.
+    """
+    unit_id: int
+    priority: EventPriority = EventPriority.NORMAL
+
+@dataclass
 class UnitPowerOnCommand(Event):
     """
     High-level command to instruct a Unit to begin its power-on sequence,
