@@ -1,9 +1,7 @@
-# models.py (Revised for Hierarchy)
-
 from dataclasses import dataclass, field
-from typing import Dict, List, Union
+from typing import Dict, List, Union, Optional
 from enum import Enum
-
+from events import ControlChannelCallRequest
 
 # --- Enums (No Change) ---
 
@@ -63,7 +61,6 @@ class Channel:
     fdma: bool
     tdma: bool
     control: bool = False
-    voice: bool = False
     data: bool = False
     bsi: bool = False
 
@@ -85,6 +82,42 @@ class Site:
         if not self.subsites:
             raise ValueError(f"Site {self.id} ({self.alias}) must be initialized with at least one subsite.")
 
+    def initialize(self, zone_id: int) -> Optional[ControlChannelCallRequest]:
+        """
+        Performs the startup procedure for this site.
+        Returns a ControlChannelCallRequest event if successful, otherwise None.
+        """
+        # 1. Check for at least one enabled channel
+        enabled_channels = [c for c in self.channels.values() if c.enabled]
+        if not enabled_channels:
+            self.status = SiteStatus.FAILED
+            print(f"  -> Site {self.id} ({self.alias}): FAILED (No enabled channels).")
+            return None
+
+        # 2. Find a suitable control channel
+        possible_ccs = sorted([c for c in enabled_channels if c.control], key=lambda c: c.id)
+        if not possible_ccs:
+            self.status = SiteStatus.FAILED
+            print(f"  -> Site {self.id} ({self.alias}): FAILED (No suitable control channel).")
+            return None
+
+        # 3. Check for at least one voice channel
+        voice_channels = [c for c in enabled_channels if not c.control and (c.fdma or c.tdma)]
+        if not voice_channels:
+            self.status = SiteStatus.FAILED
+            print(f"  -> Site {self.id} ({self.alias}): FAILED (No suitable voice channel).")
+            return None
+
+        self.control_channel = possible_ccs[0]
+        self.status = SiteStatus.ONLINE
+        print(f"  -> Site {self.id} ({self.alias}): ONLINE. Control Channel set to {self.control_channel.id}.")
+
+        # 4. Create the event to establish the control channel call
+        return ControlChannelCallRequest(
+            site_id=self.id,
+            zone_id=zone_id,
+            channel_id=self.control_channel.id
+        )
 
 # --- Logical Resource Models (Units, TGs) ---
 @dataclass

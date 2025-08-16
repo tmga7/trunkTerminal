@@ -41,6 +41,8 @@ class ZoneController:
         self.event_bus.subscribe(UnitPowerOnRequest, self.handle_unit_power_on)
         self.event_bus.subscribe(UnitRegistrationRequest, self.handle_unit_registration)
         self.event_bus.subscribe(CallRequestEvent, self.handle_call_request)  # New handler
+        self.event_bus.subscribe(ControlChannelCallRequest, self.handle_control_channel_call)
+
 
     def schedule_event(self, delay_seconds: float, event: Event):
         """Schedules an event to be processed in the future."""
@@ -92,21 +94,16 @@ class ZoneController:
             print(f"ZoneController (Zone {self.zone_id}): No sites available for Unit {unit.id} to register.")
 
     def initialize_system(self):
-        """
-        Runs the startup sequence for the specific zone this controller manages.
-        """
+        """Initializes the specific zone this controller manages."""
         print(f"\n--- Initializing Zone {self.zone_id} ---")
         zone = self.radio_system.get_zone(self.zone_id)
         if not zone:
             print(f"Error: Zone {self.zone_id} not found in configuration.")
             return
 
-        # 1. Initialize all sites in this zone
         for site in zone.sites.values():
-            site.status = SiteStatus.INITIALIZING
             self._initialize_site(site)
 
-        # 2. Initialize all consoles in this zone
         for console in zone.consoles.values():
             self._initialize_console(console, zone)
         print(f"--- Zone {self.zone_id} Initialization Complete ---\n")
@@ -122,6 +119,13 @@ class ZoneController:
             print(f"ZoneController: Scheduling registration for Unit {unit.id} in 2 seconds.")
             self.schedule_event(2.0, UnitRegistrationRequest(unit_id=unit.id))
 
+
+    def handle_control_channel_call(self, event: ControlChannelCallRequest):
+        """Handles the creation of the long-running control channel call."""
+        # TODO: Logic to create a special 'RadioCall' that represents
+        # the active control channel. This call would likely never end
+        # unless a failure event is injected.
+        print(f"ZoneController (Zone {self.zone_id}): Establishing permanent control channel call for Site {event.site_id} on Channel {event.channel_id}.")
 
     def handle_call_request(self, event: CallRequestEvent):
         """Handles a unit's request to make a call."""
@@ -145,6 +149,14 @@ class ZoneController:
             call_priority = event.priority
             heapq.heappush(self.call_busy_queue, (call_priority, self.current_time, event))
 
+    def handle_control_channel_call(self, event: ControlChannelCallRequest):
+        """Handles the creation of the long-running control channel call."""
+        # TODO: Logic to create a special 'RadioCall' that represents
+        # the active control channel. This call would likely never end
+        # unless a failure event is injected.
+        print(
+            f"ZoneController (Zone {self.zone_id}): Establishing permanent control channel call for Site {event.site_id} on Channel {event.channel_id}.")
+
     def _service_blocked_calls(self):
         """Checks if any blocked calls can now be processed."""
         if not self.call_busy_queue:
@@ -160,30 +172,14 @@ class ZoneController:
                 # Re-publish the event for immediate processing
                 self.publish_event(event)
 
-
-
     def _initialize_site(self, site: Site):
-        """Performs the startup procedure for a single site."""
+        """Performs the startup procedure for a single site by calling its own initialize method."""
+        # The site now handles its own initialization logic.
+        control_channel_event = site.initialize(zone_id=self.zone_id)
 
-        # Check for at least one enabled channel
-        enabled_channels = [c for c in site.channels.values() if c.enabled]
-        if not enabled_channels:
-            site.status = SiteStatus.FAILED
-            print(f"  -> Site {site.id} ({site.alias}): FAILED (No enabled channels).")
-            return
-
-        # Find and assign a control channel
-        possible_ccs = sorted([c for c in enabled_channels if c.control], key=lambda c: c.id)
-        if not possible_ccs:
-            site.status = SiteStatus.FAILED
-            print(f"  -> Site {site.id} ({site.alias}): FAILED (No suitable control channel).")
-            return
-
-        site.control_channel = possible_ccs[0]
-        site.status = SiteStatus.ONLINE
-        print(f"  -> Site {site.id} ({site.alias}): ONLINE. Control Channel set to {site.control_channel.id}.")
-
-        # TODO: Create a long-lasting "ControlChannelCall" for this channel.
+        if control_channel_event:
+            # If initialization was successful, publish the event to create the call.
+            self.publish_event(control_channel_event)
 
     def _initialize_console(self, console: Console, zone: RFSS):
         """Brings a console online and registers it with all available sites."""

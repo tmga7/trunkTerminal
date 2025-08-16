@@ -29,7 +29,7 @@
     unit_id: 1
 
 - time: 88.0
-  zone_id: 3
+  zone_id: 2
   event: CallRequestEvent
   params:
     unit_id: 1

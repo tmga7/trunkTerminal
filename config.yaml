@@ -29,9 +29,9 @@ wacn:
                 longitude: -75.612003419383
               operating_radius: 25.6
           channels:
-            1: { freq_tx: 769.16875, freq_rx: 794.16875, enabled: true, fdma: true, tdma: true, control: true, data: false }
-            2: { freq_tx: 769.33125, freq_rx: 794.33125, enabled: true, fdma: true, tdma: false, voice: true, data: false }
-            3: { freq_tx: 769.46875, freq_rx: 794.46875, enabled: true, fdma: false, tdma: true, voice: true, data: true }
+            1: { freq_tx: 769.16875, freq_rx: 794.16875, enabled: false, fdma: true, tdma: true, control: true, data: false }
+            2: { freq_tx: 769.33125, freq_rx: 794.33125, enabled: true, fdma: true, tdma: false,  data: false }
+            3: { freq_tx: 769.46875, freq_rx: 794.46875, enabled: true, fdma: false, tdma: true, data: true }
         2:
           alias: "East Suburbs"
           assignment_mode: "rollover"
@@ -44,7 +44,7 @@ wacn:
               operating_radius: 5
           channels:
             1: { freq_tx: 769.75625, freq_rx: 794.16875, enabled: true, fdma: true, tdma: true, control: true, data: false }
-            2: { freq_tx: 770.05625, freq_rx: 795.33125, enabled: true, fdma: true, tdma: false, control: false, voice: true, data: false }
+            2: { freq_tx: 770.05625, freq_rx: 795.33125, enabled: true, fdma: true, tdma: false, control: false, data: false }
 
       talkgroups:
         1001: { alias: "Dispatch 1", mode: "mixed", hangtime: 2000, ptt_id: false }
@@ -85,7 +85,7 @@ wacn:
               operating_radius: 5.1
           channels:
             1: { freq_tx: 150.0, freq_rx: 155.0, enabled: true, fdma: true, tdma: true, control: true }
-            2: { freq_tx: 151.0, freq_rx: 156.0, enabled: true, fdma: true, tdma: true, voice: true }
+            2: { freq_tx: 151.0, freq_rx: 156.0, enabled: true, fdma: true, tdma: true }
 
       # --- Resources like TGs and Units belong to the Zone ---
       talkgroups:
