@@ -1,0 +1,126 @@
+{
+  "wacn": [
+    {
+      "id": 48800,
+      "operating_area": {
+        "top_left": { "latitude": 45.424236903015014, "longitude": -76.47388938771302 },
+        "bottom_right": { "latitude": 45.25226317908509, "longitude": -75.0596182014537 }
+      },
+      "rfss": [
+        {
+          "id": 1,
+          "name": "Core",
+          "consoles": [
+            { "id": 101, "location": "Dispatch Center" }
+          ],
+          "groups": [
+            { "id": 1, "name": "Police", "priority": 3, "subscribers": [ 1, 2 ], "talkgroups": [ 101 ] },
+            { "id": 2, "name": "Fire", "priority": 4, "talkgroups": [ 201 ] },
+            { "id": 3, "name": "Transit", "priority": 10, "talkgroups": [ 501 ] }
+          ],
+          "subscribers": [
+            { "id": 1, "name": "Subscriber 1", "is_phase2": true, "talkgroups": [ 20 ] },
+            { "id": 2, "name": "Subscriber 2", "is_phase2": false, "talkgroups": [ 20 ] },
+            { "id": 3, "name": "Subscriber 3", "talkgroups": [10 ] }
+          ],
+          "talkgroups": [
+            { "id": 10, "priority": 1, "name": "Police Dispatch" },
+            { "id": 20, "priority": 1, "name": "Fire Dispatch" },
+            { "id": 30, "priority": 1, "name": "Transit Dispatch" }
+          ],
+          "sites": [
+            {
+              "id": 1001,
+              "location": "Site A",
+              "channels": [ { "id": 1, "frequency": 800 } ],
+              "enabled": true,
+              "subsites": [
+                {
+                  "id": 1,
+                  "name": "CSIS",
+                  "latitude": 45.43688000584178,
+                  "longitude": -75.612003419383,
+                  "operating_radius": 25.6
+                },
+                {
+                  "id": 2,
+                  "name": "Parliament",
+                  "latitude": 45.42507447278771,
+                  "longitude": -75.69984962753956,
+                  "operating_radius": 45
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": 2,
+          "name": "RFSS Two",
+          "consoles": [
+            { "id": 101, "location": "Dispatch Center" }
+          ],
+          "groups": [
+            { "id": 1, "name": "Police", "priority": 3, "subscribers": [ 1, 2 ], "talkgroups": [ 101 ] },
+            { "id": 2, "name": "Fire", "priority": 4, "talkgroups": [ 201 ] },
+            { "id": 3, "name": "Transit", "priority": 10, "talkgroups": [ 501 ] }
+          ],
+          "subscribers": [
+            { "id": 1, "name": "Subscriber 1", "is_phase2": true, "talkgroups": [ 10 ] },
+            { "id": 2, "name": "Subscriber 2", "is_phase2": false, "talkgroups": [ 10 ] },
+            { "id": 3, "name": "Subscriber 3", "talkgroups": [ 10] }
+          ],
+          "talkgroups": [
+            { "id": 10, "priority": 1, "name": "Police Dispatch" },
+            { "id": 20, "priority": 1, "name": "Fire Dispatch" },
+            { "id": 30, "priority": 1, "name": "Transit Dispatch" }
+          ],
+          "sites": [
+            {
+              "id": 1001,
+              "location": "South Zone",
+              "channels": [ { "id": 1, "frequency": 800 } ],
+              "subsites": [
+                {
+                  "id": 10,
+                  "name": "Airport",
+                  "latitude": 45.32207432976861,
+                  "longitude": -75.66843613648497,
+                  "operating_radius": 60.6
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": 5,
+          "name": "Micro RFSS System",
+          "subscribers": [
+            { "id": 101, "name": "Subscriber 101", "is_phase2": true, "talkgroups": [ 300 ] },
+            { "id": 102, "name": "Subscriber 102", "is_phase2": false, "talkgroups": [ 300 ] }
+          ],
+          "talkgroups": [
+            { "id": 300, "priority": 1, "name": "Police TAC1" }
+          ],
+          "sites": [
+            {
+              "id": 5001,
+              "location": "Undergound Site",
+              "channels": [ { "id": 1, "frequency": 800 }, { "id": 2, "frequency": 800 } ],
+              "subsites": [
+                {
+                  "id": 1,
+                  "name": "Home Site",
+                  "latitude": 43.492259344439134,
+                  "longitude": -79.72044891200964,
+                  "operating_radius": 25.6
+                }
+              ]
+            }
+          ]
+        }
+
+
+      ]
+    }
+  ]
+}
