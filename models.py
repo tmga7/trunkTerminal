@@ -51,6 +51,7 @@ class Subsite:
     id: int
     alias: str
     location: Coordinates
+    operating_radius: float
 
 
 @dataclass
@@ -63,6 +64,8 @@ class Channel:
     tdma: bool
     control: bool = False
     voice: bool = False
+    data: bool = False
+    bsi: bool = False
 
 
 @dataclass

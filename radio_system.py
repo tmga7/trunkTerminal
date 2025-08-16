@@ -82,6 +82,7 @@ class RadioSystem:
             return None
 
     # --- (Accessor methods are unchanged) ---
+
     def get_unit(self, unit_id: int, zone_id: int = None) -> Unit:
         if zone_id:
             zone = self.config.wacn.zones.get(zone_id)
@@ -96,3 +97,12 @@ class RadioSystem:
     def get_site(self, site_id: int, zone_id: int) -> Site:
         zone = self.config.wacn.zones.get(zone_id)
         return zone.sites.get(site_id) if zone else None
+
+    def get_talkgroup(self, talkgroup_id: int, zone_id: int) -> Talkgroup:
+        """Gets a talkgroup by its ID from a specific zone."""
+        zone = self.config.wacn.zones.get(zone_id)
+        return zone.talkgroups.get(talkgroup_id) if zone else None
+
+    def get_zone(self, zone_id: int) -> RFSS:
+        """Gets a zone (RFSS) by its ID."""
+        return self.config.wacn.zones.get(zone_id)
