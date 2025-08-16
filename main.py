@@ -5,7 +5,7 @@ import threading
 from radio_system import RadioSystem
 from controller import ZoneController
 import events
-from events import UnitPowerOnRequest
+from events import *
 
 # A global flag to signal the simulation thread to stop
 simulation_running = True
@@ -47,7 +47,19 @@ def load_scenario(controllers: dict[int, ZoneController], scenario_file: str):
         event_class = getattr(events, event_class_name, None)
 
         if event_class:
-            event = event_class(**item['params'])
+            # --- THIS IS THE CORRECTED LOGIC ---
+            params = item['params']
+            # If a priority is specified as a string, convert it to the enum
+            if 'priority' in params and isinstance(params['priority'], str):
+                try:
+                    # Look up the enum member by its string name (e.g., "HIGH" -> EventPriority.HIGH)
+                    params['priority'] = EventPriority[params['priority'].upper()]
+                except KeyError:
+                    print(f"Warning: Unknown priority '{params['priority']}' in scenario. Defaulting to NORMAL.")
+                    params['priority'] = EventPriority.NORMAL
+
+            event = event_class(**params)
+            # ------------------------------------
             controller.schedule_event(item['time'], event)
         else:
             print(f"Warning: Unknown event type '{event_class_name}' in scenario file.")
@@ -137,7 +149,6 @@ if __name__ == "__main__":
     radio_system = RadioSystem(config_path=config_file)
 
     if radio_system.config:
-        # Create a controller for each zone defined in the config
         zone_controllers = {}
         for zone_id in radio_system.config.wacn.zones.keys():
             print(f"Creating controller for Zone {zone_id}...")
@@ -145,15 +156,13 @@ if __name__ == "__main__":
             controller.initialize_system()
             zone_controllers[zone_id] = controller
 
-            # --- ALWAYS PRELOAD THE SCENARIO ---
-            try:
-                print(f"\nPreloading scenario from '{scenario_file}'...")
-                load_scenario(zone_controllers, scenario_file)
-                print("Scenario loaded successfully.\n")
-            except FileNotFoundError:
-                print(f"Error: Scenario file not found at '{scenario_file}'. Make sure it exists.")
-                sys.exit(1)
-            # ------------------------------------
+        try:
+            print(f"\nPreloading scenario from '{scenario_file}'...")
+            load_scenario(zone_controllers, scenario_file)
+            print("Scenario loaded successfully.\n")
+        except FileNotFoundError:
+            print(f"Error: Scenario file not found at '{scenario_file}'. Make sure it exists.")
+            sys.exit(1)
 
         # Start the main simulation loop and CLI
         run_simulation_cli(radio_system, zone_controllers)
