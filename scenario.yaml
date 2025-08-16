@@ -1,37 +1,35 @@
-# A choreographed scenario to test multi-zone operations
+# A choreographed scenario to test the new P25 state machine model
 
-# --- Events for Zone 101 ---
+# --- Events for Zone 1 ---
 - time: 2.0  # seconds into the simulation
   zone_id: 1
-  event: UnitPowerOnRequest
+  event: UnitPowerOnCommand  # Use the new high-level command
   params:
     unit_id: 1
 
-- time: 84.0
+- time: 4.0
   zone_id: 1
-  event: UnitPowerOnRequest
+  event: UnitPowerOnCommand  # Use the new high-level command
   params:
     unit_id: 2
 
-- time: 86.5
+- time: 8.0
   zone_id: 1
-  event: CallRequestEvent
+  event: UnitInitiateCallCommand # Use the new high-level command
   params:
     unit_id: 1
     talkgroup_id: 1001
-    priority: HIGH
 
-# --- Events for Zone 501 ---
+# --- Events for Zone 2 ---
 - time: 3.0
   zone_id: 2
-  event: UnitPowerOnRequest
+  event: UnitPowerOnCommand
   params:
     unit_id: 1
 
-- time: 88.0
+- time: 9.0
   zone_id: 2
-  event: CallRequestEvent
+  event: UnitInitiateCallCommand
   params:
     unit_id: 1
     talkgroup_id: 1002
-    priority: NORMAL
