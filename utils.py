@@ -22,15 +22,14 @@ class GeospatialUtils:
     def estimate_rssi(distance_km, max_distance_km, variation_db=20, max_rssi_dbm=-40,
                       min_rssi_dbm=-125):
 
-        print(f"distance_km: {distance_km} km and max_distance_km: {max_distance_km} km")
+        #print(f"distance_km: {distance_km} km and max_distance_km: {max_distance_km} km")
 
         if distance_km >= max_distance_km:
-            print(f"tripped")
             return min_rssi_dbm, 0
 
             # Calculate base signal strength in dBm
         signal_strength_dbm = min_rssi_dbm + (max_rssi_dbm - min_rssi_dbm) * (1 - (distance_km / max_distance_km))
-        print(f"signal_strength_dbm: {signal_strength_dbm}")
+        #print(f"signal_strength_dbm: {signal_strength_dbm}")
 
         # Add random variation
         random_variation = random.uniform(-variation_db, variation_db)
