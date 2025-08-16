@@ -1,0 +1,37 @@
+# A choreographed scenario to test multi-zone operations
+
+# --- Events for Zone 101 ---
+- time: 2.0  # seconds into the simulation
+  zone_id: 1
+  event: UnitPowerOnRequest
+  params:
+    unit_id: 1
+
+- time: 84.0
+  zone_id: 1
+  event: UnitPowerOnRequest
+  params:
+    unit_id: 2
+
+- time: 86.5
+  zone_id: 1
+  event: CallRequestEvent
+  params:
+    unit_id: 1
+    talkgroup_id: 1001
+    priority: HIGH
+
+# --- Events for Zone 501 ---
+- time: 3.0
+  zone_id: 2
+  event: UnitPowerOnRequest
+  params:
+    unit_id: 1
+
+- time: 88.0
+  zone_id: 3
+  event: CallRequestEvent
+  params:
+    unit_id: 1
+    talkgroup_id: 1002
+    priority: NORMAL
