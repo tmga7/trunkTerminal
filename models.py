@@ -1,9 +1,33 @@
 from dataclasses import dataclass, field
 from typing import Dict, List, Union, Optional
 from enum import Enum
-from events import ControlChannelCallRequest
 
-# --- Enums (No Change) ---
+# --- Import EventPriority from our p25 packets ---
+from p25.packets import EventPriority
+from events import ControlChannelEstablishRequest
+from p25.control_status import (
+    UnitRegistrationRequest,
+    UnitRegistrationResponse,
+    GroupAffiliationRequest,
+    GroupAffiliationResponse,
+    RegistrationStatus,
+    AffiliationStatus
+)
+
+
+# --- Enums for State Machines ---
+
+class UnitState(Enum):
+    """Represents the operational state of a Unit."""
+    POWERED_OFF = "Powered Off"
+    SEARCHING_FOR_SITE = "Searching for Site"
+    REGISTERING = "Registering"
+    IDLE_REGISTERED = "Idle (Registered)"
+    AFFILIATING = "Affiliating"
+    IDLE_AFFILIATED = "Idle (Affiliated)"
+    IN_CALL = "In Call"
+    FAILED = "Failed"
+
 
 class SiteStatus(Enum):
     """Represents the operational status of a site."""
@@ -45,7 +69,6 @@ class OperationalArea:
 # --- Core Physical Infrastructure Models ---
 @dataclass
 class Subsite:
-    """Represents a physical tower. A Site must have at least one."""
     id: int
     alias: str
     location: Coordinates
@@ -67,99 +90,127 @@ class Channel:
 
 @dataclass
 class Site:
-    """Represents an RF site, which is a collection of subsites and channels."""
     id: int
     alias: str
     assignment_mode: str
     channels: Dict[int, Channel] = field(default_factory=dict)
     subsites: List[Subsite] = field(default_factory=list)
-
     status: SiteStatus = SiteStatus.OFFLINE
     control_channel: Channel = None
     registrations: List[Union['Unit', 'Console']] = field(default_factory=list)
+    assigned_voice_channels: Dict[int, 'RadioCall'] = field(default_factory=dict)
 
     def __post_init__(self):
         if not self.subsites:
             raise ValueError(f"Site {self.id} ({self.alias}) must be initialized with at least one subsite.")
 
-    def initialize(self, zone_id: int) -> Optional[ControlChannelCallRequest]:
-        """
-        Performs the startup procedure for this site.
-        Returns a ControlChannelCallRequest event if successful, otherwise None.
-        """
-        # 1. Check for at least one enabled channel
+    def initialize(self, zone_id: int) -> Optional[ControlChannelEstablishRequest]:
         enabled_channels = [c for c in self.channels.values() if c.enabled]
         if not enabled_channels:
             self.status = SiteStatus.FAILED
             print(f"  -> Site {self.id} ({self.alias}): FAILED (No enabled channels).")
             return None
-
-        # 2. Find a suitable control channel
         possible_ccs = sorted([c for c in enabled_channels if c.control], key=lambda c: c.id)
         if not possible_ccs:
             self.status = SiteStatus.FAILED
             print(f"  -> Site {self.id} ({self.alias}): FAILED (No suitable control channel).")
             return None
-
-        # 3. Check for at least one voice channel
         voice_channels = [c for c in enabled_channels if not c.control and (c.fdma or c.tdma)]
         if not voice_channels:
             self.status = SiteStatus.FAILED
             print(f"  -> Site {self.id} ({self.alias}): FAILED (No suitable voice channel).")
             return None
-
         self.control_channel = possible_ccs[0]
         self.status = SiteStatus.ONLINE
         print(f"  -> Site {self.id} ({self.alias}): ONLINE. Control Channel set to {self.control_channel.id}.")
-
-        # 4. Create the event to establish the control channel call
-        return ControlChannelCallRequest(
+        return ControlChannelEstablishRequest(
             site_id=self.id,
             zone_id=zone_id,
             channel_id=self.control_channel.id
         )
 
+    def has_available_voice_channel(self) -> bool:
+        total_voice_channels = len([c for c in self.channels.values() if not c.control and c.enabled])
+        return len(self.assigned_voice_channels) < total_voice_channels
+
+
 # --- Logical Resource Models (Units, TGs) ---
 @dataclass
 class Talkgroup:
+    """Represents a talkgroup with its own priority level."""
     id: int
     alias: str
     hangtime: int
     ptt_id: bool
     mode: CallMode = CallMode.MIXED
+    # --- FIX: Re-add the priority field ---
+    priority: Union[str, EventPriority] = EventPriority.NORMAL
+
+    def __post_init__(self):
+        """Converts priority from string (from YAML) to the Enum type."""
+        if isinstance(self.priority, str):
+            try:
+                self.priority = EventPriority[self.priority.upper()]
+            except KeyError:
+                print(f"Warning: Invalid priority '{self.priority}' for TG {self.id}. Defaulting to NORMAL.")
+                self.priority = EventPriority.NORMAL
 
 
 @dataclass
 class Unit:
+    """Represents a radio subscriber unit with its own state machine."""
     id: int
     alias: str
     tdma_capable: bool
-    powered_on: bool = False
-    current_site: Site = None
-    affiliated_talkgroup: Talkgroup = None
+    state: UnitState = UnitState.POWERED_OFF
+    current_site: Optional[Site] = None
+    selected_talkgroup: Optional[Talkgroup] = None
+    affiliated_talkgroup: Optional[Talkgroup] = None
+    # Use forward reference 'Group' to avoid NameError
+    groups: List['Group'] = field(default_factory=list)
 
-    def power_on(self):
-        """Sets the unit's power status to ON."""
-        if not self.powered_on:
-            self.powered_on = True
-            # The message is generic to work for both Units and Consoles
-            print(f"  -> {type(self).__name__} {self.id} ({self.alias}): Powered ON.")
+    def power_on(self) -> Optional[UnitRegistrationRequest]:
+        if self.state == UnitState.POWERED_OFF:
+            self.state = UnitState.SEARCHING_FOR_SITE
+            print(f"  -> Unit {self.id} ({self.alias}): Powered ON. State: {self.state.value}.")
+            self.state = UnitState.REGISTERING
+            print(f"  -> Unit {self.id} ({self.alias}): Found site (simulated). State: {self.state.value}. Sending U_REG_REQ.")
+            return UnitRegistrationRequest(unit_id=self.id)
+        return None
 
+    def handle_registration_response(self, response: UnitRegistrationResponse) -> Optional[GroupAffiliationRequest]:
+        if response.status == RegistrationStatus.GRANTED:
+            self.state = UnitState.IDLE_REGISTERED
+            print(f"  -> Unit {self.id} ({self.alias}): Registration successful. State: {self.state.value}.")
+            if self.selected_talkgroup:
+                return self.affiliate_to_talkgroup(self.selected_talkgroup.id)
+        else:
+            self.state = UnitState.FAILED
+            print(f"  -> Unit {self.id} ({self.alias}): Registration FAILED ({response.status.value}). State: {self.state.value}.")
+        return None
 
+    def affiliate_to_talkgroup(self, talkgroup_id: int) -> GroupAffiliationRequest:
+        self.state = UnitState.AFFILIATING
+        print(f"  -> Unit {self.id} ({self.alias}): State: {self.state.value}. Sending GRP_AFF_REQ for TG {talkgroup_id}.")
+        return GroupAffiliationRequest(unit_id=self.id, talkgroup_id=talkgroup_id)
+
+    def handle_affiliation_response(self, response: GroupAffiliationResponse):
+        if response.status == AffiliationStatus.GRANTED:
+            self.state = UnitState.IDLE_AFFILIATED
+            print(f"  -> Unit {self.id} ({self.alias}): Affiliation to TG {response.talkgroup_id} successful. State: {self.state.value}.")
+        else:
+            self.state = UnitState.IDLE_REGISTERED
+            print(f"  -> Unit {self.id} ({self.alias}): Affiliation FAILED ({response.status.value}). State: {self.state.value}.")
 
 
 @dataclass
 class Console(Unit):
-    """A Console is a special type of Unit with extra capabilities."""
-    # A list of Talkgroup objects this console is permitted to use.
     affiliated_talkgroups: List[Talkgroup] = field(default_factory=list)
     can_patch_talkgroups: bool = True
     can_inhibit_units: bool = True
     tdma_capable: bool = True
 
-
     def __post_init__(self):
-        # Consoles are typically not TDMA-dependent in the same way radios are.
         self.tdma_capable = True
         print(f"Console {self.id} ({self.alias}): Initialized with special permissions.")
 
@@ -169,19 +220,19 @@ class Group:
     """A generic group for organizing units, talkgroups, or consoles."""
     id: int
     alias: str
-    # A group can contain a mix of different object types.
     members: List[Union[Unit, Talkgroup, Console]] = field(default_factory=list)
+    priority: EventPriority = EventPriority.DEFAULT
+    operating_area: Optional[OperationalArea] = None
 
 
 @dataclass
 class RadioCall:
-    """Represents an active radio call on the system. (The new site_call.py)"""
     id: int
     initiating_unit: Unit
     talkgroup: Talkgroup
     involved_sites: List[Site]
     status: CallStatus = CallStatus.IDLE
-    mode: CallMode = CallMode.TDMA  # Default, can be changed by CallManager
+    mode: CallMode = CallMode.TDMA
 
     def start(self):
         self.status = CallStatus.ACTIVE
@@ -194,25 +245,24 @@ class RadioCall:
 
 # --- High-Level Hierarchical Containers ---
 @dataclass
-class RFSS:  # A Zone Controller
-    """Represents a single zone (RFSS) with its own System ID."""
-    id: int  # This is the System ID
+class RFSS:
+    id: int
     alias: str
     area: OperationalArea
     sites: Dict[int, Site]
     talkgroups: Dict[int, Talkgroup]
     units: Dict[int, Unit]
     consoles: Dict[int, Console]
+    groups: Dict[int, 'Group'] = field(default_factory=dict)
 
 
 @dataclass
 class WACN:
-    """Represents the top-level network identifier."""
-    id: int  # The WACN ID
-    zones: Dict[int, RFSS]  # Contains all zones (RFSS) under this WACN
+    id: int
+    zones: Dict[int, RFSS]
+    area: Optional[OperationalArea] = None
 
 
-# The SystemConfig now just points to the top-level WACN object.
 @dataclass
 class SystemConfig:
     wacn: WACN

@@ -3,6 +3,13 @@
 # --- Top Level WACN Definition ---
 wacn:
   id: 781824 # The Wide Area Communications Network ID
+  area:
+    top_left:
+      latitude: 57.84418495872474
+      longitude: -95.19741500017984
+    bottom_right:
+      latitude: 41.02297681282869
+      longitude: -75.06026732441593
 
   # --- Zones (RFSS) are defined under the WACN ---
   zones:
@@ -61,6 +68,16 @@ wacn:
         1: { alias: "Unit A", tdma_capable: true }
         2: { alias: "Unit B", tdma_capable: false }
 
+      groups:
+        9001: # Group ID
+          alias: "Default Group"
+          priority: "DEFAULT" # Corresponds to the enum value 7
+          # This group includes all units and talkgroups in this zone
+          members:
+            units: [ 1, 2 ]
+            talkgroups: [ 1001, 1002 ]
+            consoles: [ 2001 ]
+
     2: # Zone/RFSS ID (This is also the System ID)
       alias: "Undergroup System"
       area:
@@ -93,5 +110,15 @@ wacn:
         1002: { alias: "Tac 1", mode: "tdma", hangtime: 3000, ptt_id: true }
 
       units:
-        1: { alias: "Unit A", tdma_capable: true }
-        2: { alias: "Unit B", tdma_capable: false }
+        3: { alias: "Unit A", tdma_capable: true }
+        4: { alias: "Unit B", tdma_capable: false }
+
+      groups:
+        9001: # Group ID
+          alias: "Default Group"
+          priority: "DEFAULT" # Corresponds to the enum value 7
+          # This group includes all units and talkgroups in this zone
+          members:
+            units: [ 3, 4 ]
+            talkgroups: [ 1001, 1002 ]
+            consoles: [ 2001 ]
