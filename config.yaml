@@ -26,7 +26,7 @@ wacn:
       # --- Sites are defined within a Zone ---
       sites:
         1:
-          alias: "Core"
+          alias: "Core Simulcast"
           assignment_mode: "balanced"
           subsites:
             - id: 1001
@@ -35,8 +35,14 @@ wacn:
                 latitude: 45.43688000584178
                 longitude: -75.612003419383
               operating_radius: 25.6
+            - id: 1002
+              alias: "Tower B"
+              location:
+                latitude: 45.45637722697235
+                longitude: -75.5615424344366
+              operating_radius: 5
           channels:
-            1: { freq_tx: 769.16875, freq_rx: 794.16875, enabled: false, fdma: true, tdma: true, control: true, data: false }
+            1: { freq_tx: 769.16875, freq_rx: 794.16875, enabled: true, fdma: true, tdma: true, control: true, data: false }
             2: { freq_tx: 769.33125, freq_rx: 794.33125, enabled: true, fdma: true, tdma: false,  data: false }
             3: { freq_tx: 769.46875, freq_rx: 794.46875, enabled: true, fdma: false, tdma: true, data: true }
         2:
@@ -44,7 +50,7 @@ wacn:
           assignment_mode: "rollover"
           subsites:
             - id: 2001
-              alias: "Tower B"
+              alias: "East Tower"
               location:
                 latitude: 45.42507447278771
                 longitude: -75.69984962753956
@@ -116,8 +122,8 @@ wacn:
         1002: { alias: "Tac 1", mode: "tdma", hangtime: 3000, ptt_id: true }
 
       units:
-        3: { alias: "Unit A", tdma_capable: true }
-        4: { alias: "Unit B", tdma_capable: false }
+        3: { alias: "Unit AA", tdma_capable: true }
+        4: { alias: "Unit BB", tdma_capable: false }
 
       groups:
         9001: # Group ID

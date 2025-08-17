@@ -102,6 +102,7 @@ class StatusUpdateRequest(InboundSignalingPacket):
 @dataclass
 class UnitRegistrationRequest(InboundSignalingPacket):
     """P25 U_REG_REQ: Sent by a unit to register on a site."""
+    site_id: int # A unit must know which site it's trying to register on
     priority: EventPriority = EventPriority.SYSTEM
 
 
@@ -145,10 +146,14 @@ class RegistrationStatus(Enum):
 
 
 class AffiliationStatus(Enum):
-    """Possible outcomes for an affiliation request."""
-    GRANTED = "Granted"
-    FAILED_UNKNOWN_GROUP = "Failed: Unknown Group"
-    FAILED_NOT_AUTHORIZED = "Failed: Not Authorized"
+    """
+    Possible outcomes for an affiliation request, based on P25 standard values.
+    Corresponds to the Group Affiliation Value (GAV).
+    """
+    ACCEPTED = "Accepted"           # %00 = AFF_ACCEPT
+    DENIED = "Denied"               # %01 = AFF_DENY
+    FAILED = "Failed"               # %10 = AFF_FAIL
+    REFUSED = "Refused"             # %11 = AFF_REFUSED (Invalid Group)
 
 
 @dataclass
