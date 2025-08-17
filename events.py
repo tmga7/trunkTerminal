@@ -68,3 +68,13 @@ class ControlChannelEstablishRequest(Event):
     zone_id: int
     channel_id: int
     priority: EventPriority = EventPriority.SYSTEM
+
+@dataclass
+class UnitUnbanFromSiteCommand(Event):
+    """
+    Internal command to remove a site from a unit's temporary ban list
+    after a failed registration attempt.
+    """
+    unit_id: int
+    site_id: int
+    priority: EventPriority = EventPriority.LOW

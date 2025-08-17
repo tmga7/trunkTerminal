@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import Dict, List, Union, Optional, Tuple
+from typing import Dict, List, Union, Optional, Tuple, Set
 from enum import Enum
 
 # --- Import EventPriority from our p25 packets ---
@@ -13,6 +13,9 @@ from p25.control_status import (
     RegistrationStatus,
     AffiliationStatus
 )
+
+# --- Constants ---
+MAX_AFFILIATION_ATTEMPTS = 3
 
 
 # --- Enums for State Machines ---
@@ -142,7 +145,6 @@ class Talkgroup:
     hangtime: int
     ptt_id: bool
     mode: CallMode = CallMode.MIXED
-    # --- FIX: Re-add the priority field ---
     priority: Union[str, EventPriority] = EventPriority.NORMAL
 
     def __post_init__(self):
@@ -162,48 +164,83 @@ class Unit:
     alias: str
     tdma_capable: bool
     state: UnitState = UnitState.POWERED_OFF
-    location: Optional[Coordinates] = None #
+    location: Optional[Coordinates] = None
     current_site: Optional[Site] = None
     visible_sites: List[Tuple[Site, int]] = field(default_factory=list)
     selected_talkgroup: Optional[Talkgroup] = None
     affiliated_talkgroup: Optional[Talkgroup] = None
     groups: List['Group'] = field(default_factory=list)
+    banned_sites: Set[int] = field(default_factory=set)
+    banned_talkgroups: Set[int] = field(default_factory=set) # --- ADDED: For permanent bans ---
+    affiliation_attempts: Dict[int, int] = field(default_factory=dict) # --- ADDED: Tracks failures ---
 
     def power_on(self) -> None:
-        """Initiates the power-on sequence.
-
-        This method now only sets the initial state. The subsequent actions
-        (finding a site, registering) will be driven by events.
-        """
+        """Initiates the power-on sequence."""
         if self.state == UnitState.POWERED_OFF:
             self.state = UnitState.SEARCHING_FOR_SITE
+            # Reset transient states upon power on
+            self.banned_sites.clear()
+            self.banned_talkgroups.clear()
+            self.affiliation_attempts.clear()
+            self.current_site = None
+            self.affiliated_talkgroup = None
             print(f"  -> Unit {self.id} ({self.alias}): Powered ON. State: {self.state.value}.")
-            # The ZoneController will now be responsible for simulating the
-            # site search and then triggering the registration.
 
     def handle_registration_response(self, response: UnitRegistrationResponse) -> Optional[GroupAffiliationRequest]:
+        """Handles the system's response to a registration request."""
         if response.status == RegistrationStatus.GRANTED:
             self.state = UnitState.IDLE_REGISTERED
-            print(f"  -> Unit {self.id} ({self.alias}): Registration successful. State: {self.state.value}.")
+            print(f"  -> Unit {self.id} ({self.alias}): Registration successful on Site {response.site_id}. State: {self.state.value}.")
             if self.selected_talkgroup:
-                return self.affiliate_to_talkgroup(self.selected_talkgroup.id)
+                return self.affiliate_to_talkgroup(self.selected_talkgroup)
         else:
-            self.state = UnitState.FAILED
-            print(f"  -> Unit {self.id} ({self.alias}): Registration FAILED ({response.status.value}). State: {self.state.value}.")
+            self.state = UnitState.SEARCHING_FOR_SITE
+            self.banned_sites.add(response.site_id)
+            print(f"  -> Unit {self.id} ({self.alias}): Registration FAILED on Site {response.site_id} ({response.status.value}).")
+            print(f"  -> Unit {self.id} ({self.alias}): Temporarily banned this site. Rescanning...")
         return None
 
-    def affiliate_to_talkgroup(self, talkgroup_id: int) -> GroupAffiliationRequest:
+    def affiliate_to_talkgroup(self, talkgroup: Talkgroup) -> Optional[GroupAffiliationRequest]:
+        """Checks bans and attempts, then sends an affiliation request."""
+        if talkgroup.id in self.banned_talkgroups:
+            print(f"  -> Unit {self.id} ({self.alias}): TG {talkgroup.id} is permanently banned. Cannot affiliate.")
+            self.state = UnitState.IDLE_REGISTERED # Go back to idle
+            return None
+
+        if self.affiliation_attempts.get(talkgroup.id, 0) >= MAX_AFFILIATION_ATTEMPTS:
+            print(f"  -> Unit {self.id} ({self.alias}): Max affiliation attempts reached for TG {talkgroup.id}. Stopping.")
+            self.state = UnitState.IDLE_REGISTERED
+            return None
+
         self.state = UnitState.AFFILIATING
-        print(f"  -> Unit {self.id} ({self.alias}): State: {self.state.value}. Sending GRP_AFF_REQ for TG {talkgroup_id}.")
-        return GroupAffiliationRequest(unit_id=self.id, talkgroup_id=talkgroup_id)
+        print(f"  -> Unit {self.id} ({self.alias}): State: {self.state.value}. Sending GRP_AFF_REQ for TG {talkgroup.id}.")
+        return GroupAffiliationRequest(unit_id=self.id, talkgroup_id=talkgroup.id)
 
     def handle_affiliation_response(self, response: GroupAffiliationResponse):
-        if response.status == AffiliationStatus.GRANTED:
+        """Handles the detailed affiliation response from the system."""
+        tg_id = response.talkgroup_id
+
+        if response.status == AffiliationStatus.ACCEPTED:
             self.state = UnitState.IDLE_AFFILIATED
-            print(f"  -> Unit {self.id} ({self.alias}): Affiliation to TG {response.talkgroup_id} successful. State: {self.state.value}.")
-        else:
+            self.affiliated_talkgroup = self.selected_talkgroup
+            self.affiliation_attempts.pop(tg_id, None) # Clear attempts on success
+            print(f"  -> Unit {self.id} ({self.alias}): AFF_ACCEPT. Affiliation to TG {tg_id} successful. State: {self.state.value}.")
+
+        elif response.status == AffiliationStatus.DENIED:
+            self.state = UnitState.SEARCHING_FOR_SITE # Per standard, hunt for a new site
+            print(f"  -> Unit {self.id} ({self.alias}): AFF_DENY. Not authorized for TG {tg_id} on this site. Hunting for new site...")
+
+        elif response.status == AffiliationStatus.FAILED:
+            self.affiliation_attempts[tg_id] = self.affiliation_attempts.get(tg_id, 0) + 1
+            self.state = UnitState.IDLE_REGISTERED # Go back to idle before retry
+            print(f"  -> Unit {self.id} ({self.alias}): AFF_FAIL. Affiliation failed for TG {tg_id}. Attempt {self.affiliation_attempts[tg_id]}/{MAX_AFFILIATION_ATTEMPTS}.")
+            # The user would have to manually trigger a re-attempt in a real radio.
+            # Here, we could simulate it or just stop as we do in affiliate_to_talkgroup.
+
+        elif response.status == AffiliationStatus.REFUSED:
+            self.banned_talkgroups.add(tg_id)
             self.state = UnitState.IDLE_REGISTERED
-            print(f"  -> Unit {self.id} ({self.alias}): Affiliation FAILED ({response.status.value}). State: {self.state.value}.")
+            print(f"  -> Unit {self.id} ({self.alias}): AFF_REFUSED. TG {tg_id} is invalid. Permanently banned.")
 
 
 @dataclass

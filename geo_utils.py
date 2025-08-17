@@ -27,7 +27,7 @@ def estimate_rssi(distance_km: float, subsite: Subsite) -> tuple[float, int]:
     """
     max_distance_km = subsite.operating_radius
     max_rssi_dbm = -50  # Strongest possible signal at the tower
-    min_rssi_dbm = -125 # Weakest usable signal
+    min_rssi_dbm = -121 # Weakest usable signal
 
     if distance_km >= max_distance_km:
         return min_rssi_dbm, 0
@@ -36,18 +36,21 @@ def estimate_rssi(distance_km: float, subsite: Subsite) -> tuple[float, int]:
     signal_strength_dbm = max_rssi_dbm - (75 * (distance_km / max_distance_km))
 
     # Add some random variation to simulate real-world conditions
-    signal_strength_dbm += random.uniform(-5, 5)
+    signal_strength_dbm += random.uniform(-3, 3)
     signal_strength_dbm = max(min_rssi_dbm, min(max_rssi_dbm, signal_strength_dbm))
 
-    # Convert dBm to RSSI level (0 to 4 bars)
+    # --- UPDATED: More granular RSSI level conversion ---
     if signal_strength_dbm >= -70:
         rssi_level = 4
     elif signal_strength_dbm >= -90:
         rssi_level = 3
     elif signal_strength_dbm >= -110:
         rssi_level = 2
-    else:
+    elif signal_strength_dbm > min_rssi_dbm: # Use min_rssi_dbm as the threshold
         rssi_level = 1
+    else:
+        rssi_level = 0 # Signals at or below the minimum get level 0
+
 
     return signal_strength_dbm, rssi_level
 

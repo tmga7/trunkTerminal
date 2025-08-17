@@ -12,6 +12,10 @@ from p25.control_status import *
 from p25.voice_service import *
 
 
+# --- Constants ---
+REGISTRATION_BAN_TIME_SECONDS = 30.0
+
+
 # Forward declaration for type hinting to avoid circular import
 class RadioSystem:
     pass
@@ -27,9 +31,10 @@ class ZoneController:
         self.radio_system = radio_system
         self.zone_id = zone_id
         self.event_bus = EventBus()
-        self.event_queue = []  # Priority queue: (execution_time, priority, event)
+        self.event_queue = []  # Priority queue: (execution_time, priority, counter, event)
         self.call_busy_queue = deque()  # Simple FIFO queue for now
         self.current_time = 0.0
+        self.event_counter = 0
         self._register_handlers()
 
     def _register_handlers(self):
@@ -40,6 +45,7 @@ class ZoneController:
         self.event_bus.subscribe(ControlChannelEstablishRequest, self.handle_control_channel_establish)
         self.event_bus.subscribe(UnitUpdateLocationCommand, self.handle_unit_update_location_command)
         self.event_bus.subscribe(UnitScanForSitesCommand, self.handle_unit_scan_for_sites_command)
+        self.event_bus.subscribe(UnitUnbanFromSiteCommand, self.handle_unit_unban_from_site_command)
 
         # --- P25 Inbound Signaling Packets (ISPs) ---
         self.event_bus.subscribe(UnitRegistrationRequest, self.handle_unit_registration_request)
@@ -49,8 +55,8 @@ class ZoneController:
     def schedule_event(self, delay_seconds: float, event: Event):
         """Schedules an event or packet to be processed in the future."""
         execution_time = self.current_time + delay_seconds
-        # Use event's priority attribute for sorting in the heap
-        heapq.heappush(self.event_queue, (execution_time, event.priority, event))
+        heapq.heappush(self.event_queue, (execution_time, event.priority, self.event_counter, event))
+        self.event_counter += 1
 
         event_name = type(event).__name__
         log_msg = f"  (T={execution_time:.2f}s) Zone {self.zone_id}: {event_name}"
@@ -58,45 +64,31 @@ class ZoneController:
         if isinstance(event, InboundSignalingPacket):
             print(f"  [ISP QUEUED] {log_msg} from Unit {event.unit_id}")
         elif isinstance(event, OutboundSignalingPacket):
-            # Check if the OSP is directed to a specific unit
             if hasattr(event, 'unit_id'):
                 print(f"  [OSP QUEUED] {log_msg} to Unit {event.unit_id}")
             else:
                 print(f"  [OSP QUEUED] {log_msg}")
         else:
-            # For other simulation events like commands
             print(f"  [EVENT QUEUED] {log_msg}")
 
     def handle_unit_power_on_command(self, command: UnitPowerOnCommand):
         """Handles the high-level command to power on a unit."""
-        unit = self.radio_system.get_unit(command.unit_id) # Search all zones
+        unit = self.radio_system.get_unit(command.unit_id)
         if not unit:
             print(f"Error: Unit {command.unit_id} not found anywhere in the system.")
             return
 
-        # 1. Determine initial location if not already set
         if not unit.location:
             group_area = next((g.area for g in unit.groups if g.area), None)
-
-            # This print statement will now work correctly
-            print(f"DEBUG: Found group_area: {group_area}")
-
             if group_area:
                 unit.location = get_random_point_in_area(group_area)
-                print(
-                    f"  -> Unit {unit.id} ({unit.alias}): Using group area. Placed at {unit.location.latitude:.4f}, {unit.location.longitude:.4f}")
+                print(f"  -> Unit {unit.id} ({unit.alias}): Using group area. Placed at {unit.location.latitude:.4f}, {unit.location.longitude:.4f}")
             else:
-                # Fallback to the main WACN area
                 wacn_area = self.radio_system.config.wacn.area
                 unit.location = get_random_point_in_area(wacn_area)
-                print(
-                    f"  -> Unit {unit.id} ({unit.alias}): No group area. Placed in WACN at {unit.location.latitude:.4f}, {unit.location.longitude:.4f}")
+                print(f"  -> Unit {unit.id} ({unit.alias}): No group area. Placed in WACN at {unit.location.latitude:.4f}, {unit.location.longitude:.4f}")
 
-        # 2. Power on the unit (this just changes its internal state)
         unit.power_on()
-
-        # 3. Directly and unconditionally trigger the scanning process.
-        #    This is the core purpose of powering on a field unit.
         print(f"  -> Triggering scan for Unit {unit.id}...")
         self.publish_event(UnitScanForSitesCommand(unit_id=unit.id))
 
@@ -106,84 +98,127 @@ class ZoneController:
         if unit:
             unit.location = command.new_location
             print(f"  -> Unit {unit.id} ({unit.alias}): Location updated. Triggering site re-scan.")
-            # Changing location always triggers a new scan
             self.publish_event(UnitScanForSitesCommand(unit_id=unit.id))
 
     def handle_unit_scan_for_sites_command(self, command: UnitScanForSitesCommand):
-        """Scans all sites to find the best one for a unit and displays results in a table."""
-        # --- FIX: Search for the unit across the whole system, not just this controller's zone ---
+        """Scans all non-banned subsites to find the one with the best RSSI."""
         unit = self.radio_system.get_unit(command.unit_id)
         if not unit or not unit.location:
             print(f"Warning: Could not scan for Unit {command.unit_id}. Unit not found or has no location.")
             return
 
-        # ... (the rest of the method with the table printing is unchanged)
         print(f"--- Unit {unit.id} ({unit.alias}) RF Scan Results ---")
         print(f"Scanning from Location: {unit.location.latitude:.5f}, {unit.location.longitude:.5f}")
 
         unit.visible_sites.clear()
-        best_site, best_rssi = None, -1
+        best_site, best_subsite, best_rssi, best_zone_id = None, None, -1, None
         scan_results = []
 
         for zone in self.radio_system.config.wacn.zones.values():
             for site in zone.sites.values():
                 if site.status != SiteStatus.ONLINE: continue
+                if site.id in unit.banned_sites:
+                    print(f"  [Debug] Skipping Site '{site.alias}' (Zone {zone.id}) - Currently banned for this unit.")
+                    continue
 
-                closest_subsite = min(site.subsites, key=lambda s: get_distance(unit.location, s.location))
-                dist_km = get_distance(unit.location, closest_subsite.location)
-                dbm, rssi_level = estimate_rssi(dist_km, closest_subsite)
-
-                scan_results.append({
-                    "zone_id": zone.id,
-                    "site_alias": site.alias,
-                    "coords": f"{closest_subsite.location.latitude:.5f}, {closest_subsite.location.longitude:.5f}",
-                    "distance_km": dist_km,
-                    "dbm": dbm,
-                    "rssi_level": rssi_level
-                })
-
-                if rssi_level > 0:
-                    unit.visible_sites.append((site, rssi_level))
+                for subsite in site.subsites:
+                    dist_km = get_distance(unit.location, subsite.location)
+                    dbm, rssi_level = estimate_rssi(dist_km, subsite)
+                    scan_results.append({ "zone_id": zone.id, "site_alias": site.alias, "subsite_alias": subsite.alias, "distance_km": dist_km, "dbm": dbm, "rssi_level": rssi_level })
                     if rssi_level > best_rssi:
-                        best_rssi, best_site = rssi_level, site
+                        best_rssi, best_site, best_subsite, best_zone_id = rssi_level, site, subsite, zone.id
 
-        print("┌" + "─" * 65 + "┐")
-        print(f"| {'Zone':<5} | {'Site Alias':<15} | {'Distance (km)':<15} | {'RSSI (dBm)':<12} | {'Level':<5} |")
-        print("├" + "─" * 65 + "┤")
-
+        print("┌" + "─" * 85 + "┐")
+        print(f"| {'Zone':<5} | {'Site Alias':<15} | {'Subsite Alias':<15} | {'Distance (km)':<15} | {'RSSI (dBm)':<12} | {'Level':<5} |")
+        print("├" + "─" * 85 + "┤")
         for result in sorted(scan_results, key=lambda x: x['rssi_level'], reverse=True):
-            print(
-                f"| {result['zone_id']:<5} | {result['site_alias']:<15} | {result['distance_km']:<15.2f} | {result['dbm']:<12.1f} | {result['rssi_level']:<5} |")
+            print(f"| {result['zone_id']:<5} | {result['site_alias']:<15} | {result['subsite_alias']:<15} | {result['distance_km']:<15.2f} | {result['dbm']:<12.1f} | {result['rssi_level']:<5} |")
+        print("└" + "─" * 85 + "┘")
 
-        print("└" + "─" * 65 + "┘")
-
-        if best_site:
-            print(f"  -> Best site found: '{best_site.alias}' (Zone {best_site.id}) with RSSI Level {best_rssi}")
+        if best_site and best_rssi > 0:
+            print(f"  -> Best signal from Subsite '{best_subsite.alias}' (Site '{best_site.alias}') with RSSI Level {best_rssi}")
             if unit.state == UnitState.SEARCHING_FOR_SITE:
-                print(f"  -> Attempting registration...")
+                print(f"  -> Attempting registration on Site '{best_site.alias}'...")
                 unit.current_site = best_site
                 unit.state = UnitState.REGISTERING
-                reg_request = UnitRegistrationRequest(unit_id=unit.id)
+                reg_request = UnitRegistrationRequest(unit_id=unit.id, site_id=best_site.id)
                 self.schedule_event(0.1, reg_request)
         else:
             unit.state = UnitState.FAILED
-            print(f"  -> FAILED. No sites found in range.")
+            print(f"  -> FAILED. No usable sites found in range.")
 
+    def handle_unit_unban_from_site_command(self, command: UnitUnbanFromSiteCommand):
+        """Removes a site from a unit's ban list."""
+        unit = self.radio_system.get_unit(command.unit_id)
+        if unit and command.site_id in unit.banned_sites:
+            unit.banned_sites.remove(command.site_id)
+            print(f"  -> Unit {unit.id} ({unit.alias}): Cool-off period ended. Site {command.site_id} is no longer banned.")
 
     def publish_event(self, event: Event):
-        """A convenience method to publish an event for immediate processing."""
         self.schedule_event(0, event)
 
     def tick(self, delta_time: float):
-        """The main heartbeat of the simulation."""
         self.current_time += delta_time
         while self.event_queue and self.event_queue[0][0] <= self.current_time:
-            execution_time, priority, event = heapq.heappop(self.event_queue)
+            execution_time, priority, counter, event = heapq.heappop(self.event_queue)
             self.event_bus.publish(event)
         self._service_blocked_calls()
 
-    # --- Command Handlers (triggered by scenario/CLI) ---
+    def handle_unit_registration_request(self, packet: UnitRegistrationRequest):
+        """Handles a U_REG_REQ packet, including failure and banning logic."""
+        unit = self.radio_system.get_unit(packet.unit_id)
+        site = self.radio_system.get_site(packet.site_id, self.zone_id)
+        response_packet = None
 
+        if not (unit and site):
+            return
+
+        if len(site.registrations) < 1000:
+            site.registrations.append(unit)
+            response_packet = UnitRegistrationResponse(status=RegistrationStatus.GRANTED, unit_id=unit.id, site_id=site.id)
+        else:
+            response_packet = UnitRegistrationResponse(status=RegistrationStatus.FAILED_SYSTEM_FULL, unit_id=unit.id, site_id=site.id)
+
+        next_isp = unit.handle_registration_response(response_packet)
+
+        if response_packet.status != RegistrationStatus.GRANTED:
+            self.schedule_event(
+                REGISTRATION_BAN_TIME_SECONDS,
+                UnitUnbanFromSiteCommand(unit_id=unit.id, site_id=site.id)
+            )
+            self.publish_event(UnitScanForSitesCommand(unit_id=unit.id))
+
+        elif next_isp:
+            self.schedule_event(0.1, next_isp)
+
+    def handle_group_affiliation_request(self, packet: GroupAffiliationRequest):
+        """
+        Handles a GRP_AFF_REQ packet and sends the appropriate P25 response.
+        """
+        unit = self.radio_system.get_unit(packet.unit_id, self.zone_id)
+        talkgroup = self.radio_system.get_talkgroup(packet.talkgroup_id, self.zone_id)
+        response_status = None
+
+        if not unit: return
+
+        if not talkgroup:
+            # Per standard, if the group address is invalid, send REFUSED
+            response_status = AffiliationStatus.REFUSED
+        else:
+            # Simple logic for now: all known talkgroups are accepted.
+            # In a real system, this would check a provisioning database.
+            response_status = AffiliationStatus.ACCEPTED
+
+        response_packet = GroupAffiliationResponse(
+            status=response_status,
+            unit_id=unit.id,
+            talkgroup_id=packet.talkgroup_id
+        )
+
+        # "Send" the response back to the unit to be handled by its state machine
+        unit.handle_affiliation_response(response_packet)
+
+    # ... (the rest of the ZoneController class remains the same) ...
     def handle_unit_initiate_call_command(self, command: UnitInitiateCallCommand):
         """Handles the high-level command for a unit to start a call using the new priority logic."""
         unit = self.radio_system.get_unit(command.unit_id, self.zone_id)
@@ -193,18 +228,14 @@ class ZoneController:
             print(f"ZoneController: Call request from Unit {command.unit_id} denied (invalid state or objects).")
             return
 
-        final_priority = talkgroup.priority  # Start with the talkgroup's priority
+        final_priority = talkgroup.priority
 
-        # 1. Check if the unit is in a group with a non-default priority
         if unit.groups:
-            # Simple logic: use the priority of the first group the unit belongs to
             group_priority = unit.groups[0].priority
-            # If the TG priority is just NORMAL, the group's default is a better choice
             if final_priority == EventPriority.NORMAL and group_priority != EventPriority.NORMAL:
                 final_priority = group_priority
                 print(f"  -> Using Group default priority: {final_priority.name}")
 
-        # 2. Check if the initiator is a Console (highest priority)
         if isinstance(unit, Console):
             final_priority = EventPriority.PREEMPT
             print(f"  -> Console preemption: Using {final_priority.name} priority.")
@@ -216,69 +247,6 @@ class ZoneController:
         )
         print(f"  -> Final call priority for TG {talkgroup.alias}: {final_priority.name}")
         self.publish_event(call_request_packet)
-
-    # --- P25 ISP Handlers (System Logic) ---
-
-    def handle_unit_registration_request(self, packet: UnitRegistrationRequest):
-        """Handles a U_REG_REQ packet from a unit."""
-        unit = self.radio_system.get_unit(packet.unit_id, self.zone_id)
-        zone = self.radio_system.get_zone(self.zone_id)
-        response_packet = None
-
-        if not unit or not zone:
-            # This case shouldn't happen in our simulation but is critical in a real system
-            return
-
-        # Simple logic: register to the first available online site
-        online_sites = [s for s in zone.sites.values() if s.status == SiteStatus.ONLINE]
-        if online_sites:
-            best_site = online_sites[0]
-            unit.current_site = best_site
-            best_site.registrations.append(unit)
-            print(f"ZoneController (Zone {self.zone_id}): Unit {unit.id} registered on Site {best_site.id}.")
-            response_packet = UnitRegistrationResponse(
-                status=RegistrationStatus.GRANTED,
-                unit_id=unit.id,
-                site_id=best_site.id
-            )
-        else:
-            print(f"ZoneController (Zone {self.zone_id}): No sites available for Unit {unit.id} to register.")
-            response_packet = UnitRegistrationResponse(
-                status=RegistrationStatus.FAILED_SYSTEM_FULL,  # Not quite accurate, but close enough for now
-                unit_id=unit.id,
-                site_id=0
-            )
-
-        # "Send" the response back to the unit by calling its handler.
-        # The unit's own logic will then decide what to do next.
-        next_isp = unit.handle_registration_response(response_packet)
-        if next_isp:
-            # If the unit's logic generated another packet (like GRP_AFF_REQ), schedule it.
-            self.schedule_event(0.1, next_isp)
-
-    def handle_group_affiliation_request(self, packet: GroupAffiliationRequest):
-        """Handles a GRP_AFF_REQ packet from a unit."""
-        unit = self.radio_system.get_unit(packet.unit_id, self.zone_id)
-        talkgroup = self.radio_system.get_talkgroup(packet.talkgroup_id, self.zone_id)
-        response_packet = None
-
-        if unit and talkgroup:
-            unit.affiliated_talkgroup = talkgroup
-            response_packet = GroupAffiliationResponse(
-                status=AffiliationStatus.GRANTED,
-                unit_id=unit.id,
-                talkgroup_id=talkgroup.id
-            )
-        elif not talkgroup:
-            response_packet = GroupAffiliationResponse(
-                status=AffiliationStatus.FAILED_UNKNOWN_GROUP,
-                unit_id=unit.id,
-                talkgroup_id=packet.talkgroup_id
-            )
-
-        if response_packet:
-            # "Send" the response to the unit.
-            unit.handle_affiliation_response(response_packet)
 
     def handle_group_voice_request(self, packet: GroupVoiceServiceRequest):
         """Handles a GRP_V_REQ packet, initiating a call."""
@@ -303,7 +271,6 @@ class ZoneController:
             f"ZoneController (Zone {self.zone_id}): Establishing permanent CC for Site {event.site_id} on Channel {event.channel_id}.")
         # TODO: Logic to create a special, permanent 'RadioCall' for the CC
 
-    # --- System Initialization ---
     def initialize_system(self):
         """Initializes the zone this controller manages."""
         print(f"\n--- Initializing Zone {self.zone_id} ---")
@@ -318,21 +285,17 @@ class ZoneController:
                 self.publish_event(control_channel_event)
 
         for console in zone.consoles.values():
-            console.power_on()  # Using the inherited Unit method
+            console.power_on()
             for site in zone.sites.values():
                 if site.status == SiteStatus.ONLINE:
                     site.registrations.append(console)
             print(f"  -> Console {console.id} ({console.alias}): Powered ON and registered on all online sites.")
         print(f"--- Zone {self.zone_id} Initialization Complete ---\n")
 
-    # --- Misc Methods ---
     def _service_blocked_calls(self):
         """Checks if any blocked calls can now be processed."""
-        # This logic remains largely the same for now
         pass
 
     def get_queue_status(self) -> str:
         """Returns a string summarizing the state of the event and busy queues."""
-        # This method is still useful for debugging
-        # ... (implementation is the same) ...
         return "Queue status display logic here."
