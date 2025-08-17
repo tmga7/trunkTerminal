@@ -60,15 +60,15 @@ wacn:
             2: { freq_tx: 770.05625, freq_rx: 795.33125, enabled: true, fdma: true, tdma: false, control: false, data: false }
 
       talkgroups:
-        1001: { alias: "Dispatch 1", mode: "mixed", hangtime: 2000, ptt_id: false }
-        1002: { alias: "Tac 1", mode: "tdma", hangtime: 3000, ptt_id: true }
+        1001: { alias: "Dispatch 1", mode: "fdma", hangtime: 2000, ptt_id: false}
+        1002: { alias: "Tac 1", mode: "tdma", hangtime: 3000, ptt_id: true, valid_sites: [ 2 ] }
 
       consoles:
         2001: # Console ID
           alias: "Dispatch Console 1"
           # A list of talkgroup IDs this console can monitor and use.
           # For now, it can access all talkgroups in this zone.
-          affiliated_talkgroup_ids: [1001, 1002]
+          affiliated_talkgroup_ids: [ 1001, 1002 ]
 
       units:
         1: { alias: "Unit A", tdma_capable: true }
@@ -119,7 +119,7 @@ wacn:
       # --- Resources like TGs and Units belong to the Zone ---
       talkgroups:
         1001: { alias: "Dispatch 1", mode: "mixed", hangtime: 2000, ptt_id: false }
-        1002: { alias: "Tac 1", mode: "tdma", hangtime: 3000, ptt_id: true }
+        1002: { alias: "Tac 1", mode: "tdma", hangtime: 3000, ptt_id: true,valid_sites: [ 1 ] }
 
       units:
         3: { alias: "Unit AA", tdma_capable: true }
