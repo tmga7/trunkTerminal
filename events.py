@@ -78,3 +78,31 @@ class UnitUnbanFromSiteCommand(Event):
     unit_id: int
     site_id: int
     priority: EventPriority = EventPriority.LOW
+
+@dataclass
+class UnitEndTransmissionCommand(Event):
+    """
+    High-level command for a unit to unkey and end its transmission.
+    This will trigger either the hangtime timer or an immediate teardown.
+    """
+    unit_id: int
+    call_id: int
+    priority: EventPriority = EventPriority.HIGH
+
+@dataclass
+class CallTeardownCommand(Event):
+    """
+    Internal command to release all radio resources associated with a call
+    after the hangtime has expired or if no hangtime is used.
+    """
+    call_id: int
+    priority: EventPriority = EventPriority.NORMAL
+
+@dataclass
+class ConsoleInitiateCallCommand(Event):
+    """
+    High-level command for a console to initiate or preempt a group call.
+    """
+    console_id: int
+    talkgroup_id: int
+    priority: EventPriority = EventPriority.PREEMPT # Hardcoded to the highest priority

@@ -243,7 +243,10 @@ class ProtectionParameterUpdate(OutboundSignalingPacket):
 @dataclass
 class QueuedResponse(OutboundSignalingPacket):
     """P25 QUE_RSP"""
-    pass
+    unit_id: int  # <-- ADD THIS
+    talkgroup_id: int  # <-- ADD THIS
+    queue_position: int = 1  # <-- ADD THIS (For future use)
+    priority: EventPriority = EventPriority.NORMAL  # <-- ADD THIS
 
 
 @dataclass

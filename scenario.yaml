@@ -1,35 +1,51 @@
-# A choreographed scenario to test the new P25 state machine model
+# A scenario to test call queuing with a single voice channel.
 
 # --- Events for Zone 1 ---
-- time: 2.0  # seconds into the simulation
+
+# 1. Power on Unit A (ID 1) and B (ID 2).
+- time: 2.0
   zone_id: 1
-  event: UnitPowerOnCommand  # Use the new high-level command
+  event: UnitPowerOnCommand
   params:
     unit_id: 1
 
-- time: 140.0
+- time: 4.0
   zone_id: 1
-  event: UnitPowerOnCommand  # Use the new high-level command
+  event: UnitPowerOnCommand
   params:
     unit_id: 2
 
-- time: 148.0
+# 2. At 10s, Unit A initiates a call on TG 1001. This should succeed and take the only voice channel.
+- time: 10.0
   zone_id: 1
-  event: UnitInitiateCallCommand # Use the new high-level command
+  event: UnitInitiateCallCommand
   params:
     unit_id: 1
     talkgroup_id: 1001
 
-# --- Events for Zone 2 ---
-- time: 133.0
-  zone_id: 2
-  event: UnitPowerOnCommand
-  params:
-    unit_id: 3
-
-- time: 399.0
-  zone_id: 2
+# 3. At 12s, WHILE Unit A's call is active, Unit B tries to initiate a call on another talkgroup.
+#    This request should fail and be queued. A QUE_RSP should be sent to Unit B.
+- time: 12.0
+  zone_id: 1
   event: UnitInitiateCallCommand
   params:
-    unit_id: 1
+    unit_id: 2
     talkgroup_id: 1002
+
+# 4. At 18s, Unit A ends its transmission. This frees the voice channel and should trigger
+#    the controller to service the busy queue.
+- time: 18.0
+  zone_id: 1
+  event: UnitEndTransmissionCommand
+  params:
+    unit_id: 1
+    # The call_id is dynamic; the controller will need to find the call associated with unit 1
+    call_id: 10001 # Conceptual ID
+
+# 5. At 25s, Unit B ends its now-active call.
+- time: 25.0
+  zone_id: 1
+  event: UnitEndTransmissionCommand
+  params:
+    unit_id: 2
+    call_id: 12002 # Conceptual ID

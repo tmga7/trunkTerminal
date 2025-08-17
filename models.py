@@ -1,9 +1,11 @@
 # tmga7/trunkterminal/trunkTerminal-17c921e61672f1a12e0888c6d82068578d9f6e2b/models.py
 from dataclasses import dataclass, field
 from typing import Dict, List, Union, Optional, Tuple, Set
-from enum import Enum
+from enum import Enum, auto
+import random
 
-# --- Import EventPriority from our p25 packets ---
+from p25.voice_service import GroupVoiceChannelGrant
+
 from p25.packets import EventPriority
 from events import ControlChannelEstablishRequest
 from p25.control_status import (
@@ -29,6 +31,7 @@ class UnitState(Enum):
     IDLE_REGISTERED = "Idle (Registered)"
     AFFILIATING = "Affiliating"
     IDLE_AFFILIATED = "Idle (Affiliated)"
+    CALL_REQUESTED = "Call Requested"
     IN_CALL = "In Call"
     FAILED = "Failed"
 
@@ -46,6 +49,8 @@ class CallStatus(Enum):
     IDLE = "Idle"
     REQUESTED = "Requested"
     ACTIVE = "Active"
+    QUEUED = "Queued"
+    PREEMPTED = "Preempted"
     ENDED = "Ended"
 
 
@@ -93,6 +98,16 @@ class Channel:
 
 
 @dataclass
+class VoiceChannel:
+    """Represents an allocated voice channel resource on a site."""
+    channel_id: int
+    tdma_slot: Optional[int] = None  # None for FDMA, 1 or 2 for TDMA
+
+    def __hash__(self):
+        return hash((self.channel_id, self.tdma_slot))
+
+
+@dataclass
 class Site:
     id: int
     alias: str
@@ -102,7 +117,7 @@ class Site:
     status: SiteStatus = SiteStatus.OFFLINE
     control_channel: Channel = None
     registrations: List[Union['Unit', 'Console']] = field(default_factory=list)
-    assigned_voice_channels: Dict[int, 'RadioCall'] = field(default_factory=dict)
+    assigned_voice_channels: Dict[VoiceChannel, 'RadioCall'] = field(default_factory=dict)
 
     def __post_init__(self):
         if not self.subsites:
@@ -137,6 +152,101 @@ class Site:
         total_voice_channels = len([c for c in self.channels.values() if not c.control and c.enabled])
         return len(self.assigned_voice_channels) < total_voice_channels
 
+    def find_and_assign_voice_channel(self, call: 'RadioCall', required_mode: CallMode) -> Optional[VoiceChannel]:
+        """
+        Finds and allocates a voice channel based on required mode and site's assignment strategy.
+        Implements TDMA slot prioritization and preemption placeholder.
+        Returns the allocated VoiceChannel object or None if no channel is available.
+        """
+        # --- 1. Identify all possible voice channels based on capabilities ---
+        possible_channels = []
+        for ch in self.channels.values():
+            if not ch.enabled or ch.control:
+                continue
+            if required_mode == CallMode.FDMA and ch.fdma:
+                possible_channels.append(ch)
+            elif required_mode == CallMode.TDMA and ch.tdma:
+                possible_channels.append(ch)
+            elif required_mode == CallMode.MIXED and (ch.fdma or ch.tdma):
+                possible_channels.append(ch)
+
+        if not possible_channels:
+            print(f"  -> Site {self.id}: No channels capable of handling a {required_mode.name} call.")
+            return None
+
+        # --- 2. TDMA-Specific Logic: Prioritize finding a free slot on an active channel ---
+        if required_mode == CallMode.TDMA:
+            for vc, active_call in self.assigned_voice_channels.items():
+                # Check if this channel is already in use for a TDMA call
+                if active_call.mode == CallMode.TDMA:
+                    # Is slot 1 busy? If not, check if slot 2 is free.
+                    slot1_vc = VoiceChannel(channel_id=vc.channel_id, tdma_slot=1)
+                    slot2_vc = VoiceChannel(channel_id=vc.channel_id, tdma_slot=2)
+
+                    if slot1_vc not in self.assigned_voice_channels:
+                        self.assigned_voice_channels[slot1_vc] = call
+                        print(f"  -> Site {self.id}: Assigned existing Channel {slot1_vc.channel_id} (TDMA Slot 1).")
+                        return slot1_vc
+                    if slot2_vc not in self.assigned_voice_channels:
+                        self.assigned_voice_channels[slot2_vc] = call
+                        print(f"  -> Site {self.id}: Assigned existing Channel {slot2_vc.channel_id} (TDMA Slot 2).")
+                        return slot2_vc
+
+        # --- 3. Find a completely idle channel frequency ---
+        idle_channels = []
+        for ch in possible_channels:
+            vc_fdma = VoiceChannel(channel_id=ch.id)
+            vc_tdma1 = VoiceChannel(channel_id=ch.id, tdma_slot=1)
+            # A channel is idle if it's not in the assigned list at all
+            if vc_fdma not in self.assigned_voice_channels and vc_tdma1 not in self.assigned_voice_channels:
+                idle_channels.append(ch)
+
+        # --- 4. Apply Assignment Strategy if idle channels are found ---
+        if idle_channels:
+            selected_channel = None
+            # Sort by channel ID to ensure predictable behavior for rotating and balanced modes
+            idle_channels.sort(key=lambda c: c.id)
+
+            if self.assignment_mode == "rotating":
+                selected_channel = idle_channels[0]
+            elif self.assignment_mode == "random":
+                selected_channel = random.choice(idle_channels)
+            elif self.assignment_mode == "balanced":
+                mid_point = len(idle_channels) // 2
+                selected_channel = idle_channels[mid_point]
+            else:  # Default to rotating
+                selected_channel = idle_channels[0]
+
+            # --- 5. Allocate the selected channel ---
+            if required_mode == CallMode.TDMA:
+                new_vc = VoiceChannel(channel_id=selected_channel.id, tdma_slot=1)
+                self.assigned_voice_channels[new_vc] = call
+                print(
+                    f"  -> Site {self.id}: Assigned new Channel {new_vc.channel_id} (TDMA Slot 1) via '{self.assignment_mode}' strategy.")
+                return new_vc
+            else:  # FDMA or Mixed (downgraded)
+                new_vc = VoiceChannel(channel_id=selected_channel.id)
+                self.assigned_voice_channels[new_vc] = call
+                print(
+                    f"  -> Site {self.id}: Assigned new Channel {new_vc.channel_id} (FDMA) via '{self.assignment_mode}' strategy.")
+                return new_vc
+
+        # --- 6. (Placeholder) Preemption Logic ---
+        # If we are here, it means no idle channels were found.
+        # This is where we would check for a channel with a lower-priority call (e.g., data)
+        # and preempt it. For now, we will just fail.
+        print(f"  -> Site {self.id}: All capable voice channels are busy. No channel assigned.")
+        return None
+
+    def release_voice_channel(self, voice_channel_to_release: VoiceChannel):
+        """Releases the specified voice channel, making it available again."""
+        if voice_channel_to_release in self.assigned_voice_channels:
+            del self.assigned_voice_channels[voice_channel_to_release]
+            print(
+                f"  -> Site {self.id}: Released Channel {voice_channel_to_release.channel_id} (Slot: {voice_channel_to_release.tdma_slot or 'FDMA'}).")
+        else:
+            print(f"  -> Site {self.id}: WARNING - Tried to release a channel that was not assigned.")
+
 
 # --- Logical Resource Models (Units, TGs) ---
 @dataclass
@@ -146,6 +256,7 @@ class Talkgroup:
     alias: str
     hangtime: int
     ptt_id: bool
+    all_start: bool = False
     mode: CallMode = CallMode.MIXED
     priority: Union[str, EventPriority] = EventPriority.NORMAL
     valid_sites: Optional[List[int]] = None
@@ -166,6 +277,7 @@ class Talkgroup:
                 print(f"Warning: Invalid mode '{self.mode}' for TG {self.id}. Defaulting to MIXED.")
                 self.mode = CallMode.MIXED
 
+
 @dataclass
 class Unit:
     """Represents a radio subscriber unit with its own state machine."""
@@ -182,6 +294,7 @@ class Unit:
     banned_sites: Set[Tuple[int, int]] = field(default_factory=set)  # CHANGED: Now stores (zone_id, site_id)
     banned_talkgroups: Set[int] = field(default_factory=set)
     affiliation_attempts: Dict[int, int] = field(default_factory=dict)
+    current_call: Optional['RadioCall'] = None
 
     def power_on(self) -> None:
         """Initiates the power-on sequence."""
@@ -274,6 +387,22 @@ class Unit:
             self.state = UnitState.IDLE_REGISTERED
             print(f"  -> Unit {self.id} ({self.alias}): AFF_REFUSED. TG {tg_id} is invalid. Permanently banned.")
 
+    def handle_voice_channel_grant(self, grant: GroupVoiceChannelGrant):
+        """Handles receiving the final grant to join a voice call."""
+        # --- THIS LOGIC IS NOW EXPANDED ---
+        is_initiator = self.state == UnitState.CALL_REQUESTED
+        is_listener = self.state == UnitState.IDLE_AFFILIATED
+
+        if is_initiator or is_listener:
+            self.state = UnitState.IN_CALL
+            self.current_call = self.radio_system.get_zone(self.current_site.zone_id).active_calls.get(
+                grant.call_id)  # <-- Needs a way to find the call
+
+            role = "Initiator" if is_initiator else "Listener"
+            print(
+                f"  -> Unit {self.id} ({self.alias}) [{role}]: Grant received for TG {grant.talkgroup_id}. Moving to Ch {grant.channel_id} (Slot: {grant.tdma_slot or 'N/A'}). State: {self.state.value}.")
+        else:
+            pass  # Unit is in a state where it can't accept a call (e.g., already in another call)
 
 @dataclass
 class Console(Unit):
@@ -302,7 +431,7 @@ class RadioCall:
     id: int
     initiating_unit: Unit
     talkgroup: Talkgroup
-    involved_sites: List[Site]
+    assigned_channels_by_site: Dict[int, VoiceChannel] = field(default_factory=dict)
     status: CallStatus = CallStatus.IDLE
     mode: CallMode = CallMode.TDMA
 

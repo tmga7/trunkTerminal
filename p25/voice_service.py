@@ -1,5 +1,7 @@
 from dataclasses import dataclass
 from .packets import InboundSignalingPacket, OutboundSignalingPacket, EventPriority
+from typing import Optional
+
 
 # --- Voice Service ISPs (Unit -> System) ---
 
@@ -49,7 +51,12 @@ class TelephoneInterconnectAnswerResponse(InboundSignalingPacket):
 @dataclass
 class GroupVoiceChannelGrant(OutboundSignalingPacket):
     """P25 GRP_V_CH_GRANT"""
-    pass
+    unit_id: int
+    talkgroup_id: int
+    call_id: int
+    channel_id: int             # <-- ADD THIS
+    tdma_slot: Optional[int]    # <-- ADD THIS
+    priority: EventPriority = EventPriority.HIGH
 
 
 @dataclass
