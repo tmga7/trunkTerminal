@@ -72,7 +72,13 @@ wacn:
         9001: # Group ID
           alias: "Default Group"
           priority: "DEFAULT" # Corresponds to the enum value 7
-          # This group includes all units and talkgroups in this zone
+          area:
+            top_left:
+              latitude: 45.45233002531051
+              longitude: -75.67065970324106
+            bottom_right:
+              latitude: 45.408376970404774
+              longitude: -75.45689297464475
           members:
             units: [ 1, 2 ]
             talkgroups: [ 1001, 1002 ]
@@ -122,3 +128,10 @@ wacn:
             units: [ 3, 4 ]
             talkgroups: [ 1001, 1002 ]
             consoles: [ 2001 ]
+          area:
+            top_left:
+              latitude: 45.45233002531051
+              longitude: -75.67065970324106
+            bottom_right:
+              latitude: 45.408376970404774
+              longitude: -75.45689297464475

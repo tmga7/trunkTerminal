@@ -58,7 +58,6 @@ class Coordinates:
     latitude: float
     longitude: float
 
-
 @dataclass
 class OperationalArea:
     """Defines a rectangular geographic area."""
@@ -171,11 +170,16 @@ class Unit:
     groups: List['Group'] = field(default_factory=list)
 
     def power_on(self) -> None:
-        """Sets the unit's state to begin the site searching process."""
+        """Initiates the power-on sequence.
+
+        This method now only sets the initial state. The subsequent actions
+        (finding a site, registering) will be driven by events.
+        """
         if self.state == UnitState.POWERED_OFF:
             self.state = UnitState.SEARCHING_FOR_SITE
             print(f"  -> Unit {self.id} ({self.alias}): Powered ON. State: {self.state.value}.")
-
+            # The ZoneController will now be responsible for simulating the
+            # site search and then triggering the registration.
 
     def handle_registration_response(self, response: UnitRegistrationResponse) -> Optional[GroupAffiliationRequest]:
         if response.status == RegistrationStatus.GRANTED:
@@ -221,7 +225,7 @@ class Group:
     alias: str
     members: List[Union[Unit, Talkgroup, Console]] = field(default_factory=list)
     priority: EventPriority = EventPriority.DEFAULT
-    operating_area: Optional[OperationalArea] = None
+    area: Optional[OperationalArea] = None
 
 
 @dataclass

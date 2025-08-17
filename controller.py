@@ -69,24 +69,37 @@ class ZoneController:
 
     def handle_unit_power_on_command(self, command: UnitPowerOnCommand):
         """Handles the high-level command to power on a unit."""
-        unit = self.radio_system.get_unit(command.unit_id, self.zone_id)
-        if not unit: return
+        unit = self.radio_system.get_unit(command.unit_id) # Search all zones
+        if not unit:
+            print(f"Error: Unit {command.unit_id} not found anywhere in the system.")
+            return
 
         # 1. Determine initial location if not already set
         if not unit.location:
-            wacn_area = self.radio_system.config.wacn.area
-            unit.location = get_random_point_in_area(wacn_area)
-            print(
-                f"  -> Unit {unit.id} ({unit.alias}): No location. Placed at {unit.location.latitude:.4f}, {unit.location.longitude:.4f}")
+            group_area = next((g.area for g in unit.groups if g.area), None)
 
-        # 2. Power on the unit (this just changes its state)
+            # This print statement will now work correctly
+            print(f"DEBUG: Found group_area: {group_area}")
+
+            if group_area:
+                unit.location = get_random_point_in_area(group_area)
+                print(
+                    f"  -> Unit {unit.id} ({unit.alias}): Using group area. Placed at {unit.location.latitude:.4f}, {unit.location.longitude:.4f}")
+            else:
+                # Fallback to the main WACN area
+                wacn_area = self.radio_system.config.wacn.area
+                unit.location = get_random_point_in_area(wacn_area)
+                print(
+                    f"  -> Unit {unit.id} ({unit.alias}): No group area. Placed in WACN at {unit.location.latitude:.4f}, {unit.location.longitude:.4f}")
+
+        # 2. Power on the unit (this just changes its internal state)
         unit.power_on()
 
-        # 3. Trigger the separate, reusable scanning process
-        if unit.state == UnitState.SEARCHING_FOR_SITE:
-            self.publish_event(UnitScanForSitesCommand(unit_id=unit.id))
+        # 3. Directly and unconditionally trigger the scanning process.
+        #    This is the core purpose of powering on a field unit.
+        print(f"  -> Triggering scan for Unit {unit.id}...")
+        self.publish_event(UnitScanForSitesCommand(unit_id=unit.id))
 
-    # --- NEW HANDLER for Location Changes ---
     def handle_unit_update_location_command(self, command: UnitUpdateLocationCommand):
         """Handles a unit's location change and triggers a re-scan."""
         unit = self.radio_system.get_unit(command.unit_id, self.zone_id)
@@ -98,16 +111,19 @@ class ZoneController:
 
     def handle_unit_scan_for_sites_command(self, command: UnitScanForSitesCommand):
         """Scans all sites to find the best one for a unit and displays results in a table."""
-        unit = self.radio_system.get_unit(command.unit_id, self.zone_id)
+        # --- FIX: Search for the unit across the whole system, not just this controller's zone ---
+        unit = self.radio_system.get_unit(command.unit_id)
         if not unit or not unit.location:
+            print(f"Warning: Could not scan for Unit {command.unit_id}. Unit not found or has no location.")
             return
 
+        # ... (the rest of the method with the table printing is unchanged)
         print(f"--- Unit {unit.id} ({unit.alias}) RF Scan Results ---")
         print(f"Scanning from Location: {unit.location.latitude:.5f}, {unit.location.longitude:.5f}")
 
         unit.visible_sites.clear()
         best_site, best_rssi = None, -1
-        scan_results = []  # <-- Store results for formatted printing
+        scan_results = []
 
         for zone in self.radio_system.config.wacn.zones.values():
             for site in zone.sites.values():
@@ -117,7 +133,6 @@ class ZoneController:
                 dist_km = get_distance(unit.location, closest_subsite.location)
                 dbm, rssi_level = estimate_rssi(dist_km, closest_subsite)
 
-                # Store every site that is potentially visible, even with 0 RSSI
                 scan_results.append({
                     "zone_id": zone.id,
                     "site_alias": site.alias,
@@ -132,12 +147,10 @@ class ZoneController:
                     if rssi_level > best_rssi:
                         best_rssi, best_site = rssi_level, site
 
-        # --- NEW: Print the formatted table ---
         print("┌" + "─" * 65 + "┐")
         print(f"| {'Zone':<5} | {'Site Alias':<15} | {'Distance (km)':<15} | {'RSSI (dBm)':<12} | {'Level':<5} |")
         print("├" + "─" * 65 + "┤")
 
-        # Sort results by best RSSI level for clarity
         for result in sorted(scan_results, key=lambda x: x['rssi_level'], reverse=True):
             print(
                 f"| {result['zone_id']:<5} | {result['site_alias']:<15} | {result['distance_km']:<15.2f} | {result['dbm']:<12.1f} | {result['rssi_level']:<5} |")
@@ -156,6 +169,7 @@ class ZoneController:
             unit.state = UnitState.FAILED
             print(f"  -> FAILED. No sites found in range.")
 
+
     def publish_event(self, event: Event):
         """A convenience method to publish an event for immediate processing."""
         self.schedule_event(0, event)
@@ -169,18 +183,6 @@ class ZoneController:
         self._service_blocked_calls()
 
     # --- Command Handlers (triggered by scenario/CLI) ---
-
-    def handle_unit_power_on_command(self, command: UnitPowerOnCommand):
-        """Handles the high-level command to power on a unit."""
-        unit = self.radio_system.get_unit(command.unit_id, self.zone_id)
-        if unit:
-            # Tell the unit to power on. The unit itself will generate
-            # the first P25 packet (U_REG_REQ) needed.
-            initial_packet = unit.power_on()
-            if initial_packet:
-                # Schedule the unit's request packet to be processed by the controller.
-                # We add a small delay to simulate transmission time.
-                self.schedule_event(0.1, initial_packet)
 
     def handle_unit_initiate_call_command(self, command: UnitInitiateCallCommand):
         """Handles the high-level command for a unit to start a call using the new priority logic."""

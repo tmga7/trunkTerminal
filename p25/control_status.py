@@ -102,7 +102,7 @@ class StatusUpdateRequest(InboundSignalingPacket):
 @dataclass
 class UnitRegistrationRequest(InboundSignalingPacket):
     """P25 U_REG_REQ: Sent by a unit to register on a site."""
-    priority: EventPriority = EventPriority.NORMAL
+    priority: EventPriority = EventPriority.SYSTEM
 
 
 @dataclass

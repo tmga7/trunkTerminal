@@ -49,14 +49,24 @@ class RadioSystem:
                 group_data_list = zone_data.pop("groups", {})
                 groups = {}
                 for group_id, group_data in group_data_list.items():
-                    # Convert priority string to Enum
+                    # --- REVISED and more explicit group creation ---
+
+                    # 1. Pop all known values from the raw dictionary
+                    alias = group_data.pop("alias", f"Group {group_id}")
                     priority_str = group_data.pop("priority", "DEFAULT").upper()
                     priority = EventPriority[priority_str]
-
                     member_data = group_data.pop("members", {})
-                    all_members = []
 
-                    # Find and add all member objects
+                    parsed_area = None
+                    area_data = group_data.pop("area", None)  # <-- Correct key
+                    if area_data:
+                        parsed_area = OperationalArea(
+                            top_left=Coordinates(**area_data.get("top_left", {})),
+                            bottom_right=Coordinates(**area_data.get("bottom_right", {}))
+                        )
+
+
+                    all_members = []
                     for u_id in member_data.get("units", []):
                         if u_id in units: all_members.append(units[u_id])
                     for tg_id in member_data.get("talkgroups", []):
@@ -64,14 +74,24 @@ class RadioSystem:
                     for c_id in member_data.get("consoles", []):
                         if c_id in consoles: all_members.append(consoles[c_id])
 
-                    # Create the group object
-                    group = Group(id=int(group_id), priority=priority, members=all_members, **group_data)
+                    # 3. Create the Group object with explicit arguments
+
+                    group = Group(
+                        id=int(group_id),
+                        alias=group_data.get("alias", f"Group {group_id}"),
+                        priority=priority,
+                        members=all_members,
+                        area=parsed_area
+                    )
                     groups[int(group_id)] = group
 
-                    # Go back and link the group to its members
+                    print(f"  -> PARSER: Created Group object: {group}")
+
+                    # 4. Link the final group object back to its members
                     for member in all_members:
-                        if isinstance(member, Unit):  # This also catches Consoles
+                        if isinstance(member, Unit):
                             member.groups.append(group)
+
 
                 area_data = zone_data.pop("area", {})
                 area = OperationalArea(
@@ -97,7 +117,7 @@ class RadioSystem:
             )
 
             wacn_id = wacn_data.pop('id', 0)
-            wacn = WACN(id=wacn_id, zones=zones)
+            wacn = WACN(id=wacn_id, zones=zones, area=wacn_area)
             return SystemConfig(wacn=wacn)
         except (FileNotFoundError, KeyError) as e:
             print(f"Error: Config file missing key or not found. Details: {e}")
