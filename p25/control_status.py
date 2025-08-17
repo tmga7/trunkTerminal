@@ -1,9 +1,8 @@
+# tmga7/trunkterminal/trunkTerminal-17c921e61672f1a12e0888c6d82068578d9f6e2b/p25/control_status.py
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 from .packets import InboundSignalingPacket, OutboundSignalingPacket, EventPriority
-
-
 
 # --- Control & Status ISPs (Unit -> System) ---
 
@@ -139,9 +138,12 @@ class RoamingAddressResponse(InboundSignalingPacket):
 # --- Control & Status OSPs (System -> Unit) ---
 
 class RegistrationStatus(Enum):
-    """Possible outcomes for a registration request."""
-    GRANTED = "Granted"
-    FAILED_UNKNOWN_UNIT = "Failed: Unknown Unit"
+    """Possible outcomes for a registration request, based on P25 standard."""
+    REG_ACCEPT = "Registration Accepted"
+    REG_FAIL = "Registration Failed (Verification)"
+    REG_DENY = "Registration Denied (Location)"
+    REG_REFUSED = "Registration Refused (Invalid ID)"
+    # --- Adding a simulation-specific one for clarity ---
     FAILED_SYSTEM_FULL = "Failed: System Full"
 
 
@@ -204,6 +206,8 @@ class GroupAffiliationResponse(OutboundSignalingPacket):
     status: AffiliationStatus
     unit_id: int
     talkgroup_id: int
+    zone_id: int # <-- ADDED
+    priority: EventPriority = EventPriority.NORMAL
 
 
 @dataclass
@@ -277,14 +281,14 @@ class UnitRegistrationCommand(OutboundSignalingPacket):
     """P25 U_REG_CMD"""
     pass
 
-
 @dataclass
 class UnitRegistrationResponse(OutboundSignalingPacket):
     """P25 U_REG_RSP: Sent by the system in response to a registration request."""
     status: RegistrationStatus
     unit_id: int
     site_id: int
-
+    zone_id: int
+    priority: EventPriority = EventPriority.SYSTEM
 
 @dataclass
 class UnitDeregistrationAcknowledge(OutboundSignalingPacket):

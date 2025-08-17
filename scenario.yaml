@@ -7,13 +7,13 @@
   params:
     unit_id: 1
 
-- time: 40.0
+- time: 140.0
   zone_id: 1
   event: UnitPowerOnCommand  # Use the new high-level command
   params:
     unit_id: 2
 
-- time: 48.0
+- time: 148.0
   zone_id: 1
   event: UnitInitiateCallCommand # Use the new high-level command
   params:
@@ -21,7 +21,7 @@
     talkgroup_id: 1001
 
 # --- Events for Zone 2 ---
-- time: 3.0
+- time: 133.0
   zone_id: 2
   event: UnitPowerOnCommand
   params:
